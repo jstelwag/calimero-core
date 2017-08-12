@@ -36,16 +36,18 @@
 
 package tuwien.auto.calimero;
 
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
-import tuwien.auto.calimero.exception.KNXException;
+import org.junit.Assert;
+
 import tuwien.auto.calimero.knxnetip.Discoverer;
+import tuwien.auto.calimero.knxnetip.Discoverer.Result;
 import tuwien.auto.calimero.knxnetip.servicetype.SearchResponse;
-import tuwien.auto.calimero.log.LogLevel;
-import tuwien.auto.calimero.log.LogStreamWriter;
-import tuwien.auto.calimero.log.LogWriter;
 import tuwien.auto.calimero.serial.FT12Connection;
 
 /**
@@ -68,9 +70,6 @@ public final class Util
 
 	// make sure its the same subnet as the test device (for tests that set the address)
 	private static IndividualAddress nonExisting = new IndividualAddress(1, 1, 200);
-
-	private static final LogWriter w = new LogStreamWriter(LogLevel.WARN, System.out, true, false);
-
 
 	private Util()
 	{}
@@ -118,16 +117,11 @@ public final class Util
 		return buf.toString();
 	}
 
-	/**
-	 * Returns a log writer for standard out.
-	 * <p>
-	 *
-	 * @return LogWriter
-	 */
-	public static LogWriter getLogWriter()
-	{
-		return w;
-	}
+	// marker method where previously a logging was initialized
+	public static void setupLogging() {}
+	public static void setupLogging(final String name) {}
+	// marker method where previously logging was torn down
+	public static void tearDownLogging() {}
 
 	/**
 	 * Returns KNXnet/IP router address used for testing.
@@ -138,14 +132,13 @@ public final class Util
 	public static IndividualAddress getRouterAddress()
 	{
 		if (device == null) {
-			Discoverer d;
+			final Discoverer d;
 			try {
-				d = new Discoverer(getLocalHost().getAddress(), getLocalHost().getPort(), false,
-						false);
+				d = new Discoverer(getLocalHost().getAddress(), getLocalHost().getPort(), false, false);
 				d.startSearch(2, true);
-				if (d.getSearchResponses().length == 0)
+				if (d.getSearchResponses().size() == 0)
 					return null;
-				device = d.getSearchResponses()[0].getDevice().getAddress();
+				device = d.getSearchResponses().get(0).getResponse().getDevice().getAddress();
 			}
 			catch (final KNXException e) {
 				e.printStackTrace();
@@ -183,26 +176,23 @@ public final class Util
 	}
 
 	private static boolean printLocalHost = true;
+	private static InetAddress localHost;
 
 	/**
 	 * @return the local host used for testing
 	 */
 	public static InetSocketAddress getLocalHost()
 	{
-		// don't trust default local host resolving of Java
 		try {
-			final InetSocketAddress addr;
-			final InetAddress local = InetAddress.getLocalHost();
-			//if (local.isLoopbackAddress())
-			//	addr = new InetSocketAddress(InetAddress.getByName("192.168.1.102"), 0);
-			//else
-			addr = new InetSocketAddress(local, 0);
+			if (localHost == null)
+				localHost = InetAddress.getLocalHost();
+			final InetSocketAddress addr = new InetSocketAddress(localHost, 0);
 			if (printLocalHost) {
 				printLocalHost = false;
+				final String underline = addr.toString().replaceAll(".", "=");
 				System.out.println();
-				System.out.println("\t\tLocal host used in tests:");
-				System.out.println("\t\t=========================");
-				System.out.println("\t\t  " + addr);
+				System.out.println("\t\tLocal host used in tests: " + addr);
+				System.out.println("\t\t==========================" + underline);
 				System.out.println();
 			}
 			return addr;
@@ -213,7 +203,7 @@ public final class Util
 
 	// we initially assume that our test server was started
 	private static boolean testServerRunning = true;
-	// identify test sever among other interfaces that might lurk around
+	// identify test server among other interfaces that might lurk around
 	private static final String testServerId = "calimero-core knx test-server";
 
 	/**
@@ -227,7 +217,7 @@ public final class Util
 		// we try once to find our running test server, on failure subsequent calls will
 		// immediately return to speed up tests
 		if (!testServerRunning)
-			return null;
+			Assert.fail("no KNXnet/IP test-server available!");
 		if (server == null) {
 			testServerRunning = false;
 			final Discoverer d = new Discoverer(getLocalHost().getAddress(), getLocalHost().getPort(), false, false);
@@ -237,9 +227,8 @@ public final class Util
 			catch (final InterruptedException e) {
 				e.printStackTrace();
 			}
-			final SearchResponse[] searchResponses = d.getSearchResponses();
-			for (int i = 0; i < searchResponses.length; i++) {
-				final SearchResponse res = searchResponses[i];
+			for (final Result<SearchResponse> r : d.getSearchResponses()) {
+				final SearchResponse res = r.getResponse();
 				if (testServerId.equals(res.getDevice().getName())) {
 					final InetAddress addr = res.getControlEndpoint().getAddress();
 					server = new InetSocketAddress(addr, res.getControlEndpoint().getPort());
@@ -250,6 +239,7 @@ public final class Util
 			}
 			System.err.println("\n\tA unit test case requests the KNX test server, but no running instance was found!\n"
 					+ "\t\t--> Many tests requiring KNXnet/IP will fail.\n");
+			Assert.fail("no KNXnet/IP test-server found!");
 		}
 		return server;
 	}
@@ -288,11 +278,22 @@ public final class Util
 		return "test/resources/";
 	}
 
+	private static Path temp;
+
 	/**
 	 * @return the base output directory used for unit testing
 	 */
 	public static String getTargetPath()
 	{
-		return "target/";
+		if (temp == null) {
+			try {
+				temp = Files.createTempDirectory("calimero-junit-");
+				temp.toFile().deleteOnExit();
+			}
+			catch (final IOException e) {
+				throw new RuntimeException("could not create temp directory", e);
+			}
+		}
+		return temp.toString() + "/";
 	}
 }

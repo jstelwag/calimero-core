@@ -44,26 +44,26 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
+import org.slf4j.Logger;
+
+import tuwien.auto.calimero.KNXException;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXIllegalStateException;
+import tuwien.auto.calimero.KNXRemoteException;
 import tuwien.auto.calimero.Settings;
 import tuwien.auto.calimero.dptxlator.DPTXlator;
 import tuwien.auto.calimero.dptxlator.DPTXlator2ByteUnsigned;
 import tuwien.auto.calimero.dptxlator.PropertyTypes;
 import tuwien.auto.calimero.dptxlator.TranslatorTypes;
-import tuwien.auto.calimero.exception.KNXException;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.exception.KNXIllegalStateException;
-import tuwien.auto.calimero.exception.KNXRemoteException;
-import tuwien.auto.calimero.exception.KNXTimeoutException;
-import tuwien.auto.calimero.log.LogManager;
 import tuwien.auto.calimero.log.LogService;
-import tuwien.auto.calimero.xml.Attribute;
-import tuwien.auto.calimero.xml.Element;
 import tuwien.auto.calimero.xml.KNXMLException;
-import tuwien.auto.calimero.xml.XMLFactory;
-import tuwien.auto.calimero.xml.XMLReader;
-import tuwien.auto.calimero.xml.XMLWriter;
+import tuwien.auto.calimero.xml.XmlInputFactory;
+import tuwien.auto.calimero.xml.XmlOutputFactory;
+import tuwien.auto.calimero.xml.XmlReader;
+import tuwien.auto.calimero.xml.XmlWriter;
 
 /**
  * A client to access properties in interface objects of a device.
@@ -130,7 +130,7 @@ import tuwien.auto.calimero.xml.XMLWriter;
  * In general, it is not possible for the property client to deduce the actual type to use
  * for encoding/decoding values from such an "alternative PDT". For these cases, the
  * property client has to rely on property definitions supplied by the user through
- * {@link PropertyClient#loadDefinitions(String, PropertyClient.ResourceHandler)}.
+ * {@link PropertyClient#addDefinitions(Collection)}.
  * <p>
  * A note on property descriptions:<br>
  * With a local device management adapter, not all information is supported when reading a
@@ -145,7 +145,7 @@ import tuwien.auto.calimero.xml.XMLWriter;
  * @see PropertyAdapter
  * @see PropertyTypes
  */
-public class PropertyClient implements PropertyAccess
+public class PropertyClient implements PropertyAccess, AutoCloseable
 {
 	/**
 	 * Provides an interface to load property definitions from a resource, and store
@@ -168,14 +168,25 @@ public class PropertyClient implements PropertyAccess
 	{
 		/**
 		 * Loads the properties from the resource.
-		 * <p>
 		 *
 		 * @param resource the identifier of the resource used for loading the properties
 		 * @return a collection containing the property definitions of type
 		 *         {@link PropertyClient.Property}
-		 * @throws KNXException on error reading from the resource
+		 * @throws KNXMLException on error reading from the resource
 		 */
-		Collection load(String resource) throws KNXException;
+		Collection<Property> load(String resource) throws KNXMLException;
+
+		/**
+		 * Loads the properties using the XML reader.
+		 *
+		 * @param reader the XML reader parsing the resource containing the properties, the current
+		 *        reader state has to be at, or exactly one event before, the property definition
+		 *        start element
+		 * @return a collection containing the property definitions of type
+		 *         {@link PropertyClient.Property}
+		 * @throws KNXMLException on error reading from the resource
+		 */
+		Collection<Property> load(XmlReader reader) throws KNXMLException;
 
 		/**
 		 * Saves the properties to the resource.
@@ -183,9 +194,19 @@ public class PropertyClient implements PropertyAccess
 		 * @param resource the identifier of the resource used for saving the properties
 		 * @param definitions the property definitions in a collection holding
 		 *        {@link PropertyClient.Property}-type values
-		 * @throws KNXException on error writing to the resource
+		 * @throws KNXMLException on error writing to the resource
 		 */
-		void save(String resource, Collection definitions) throws KNXException;
+		void save(String resource, Collection<Property> definitions) throws KNXMLException;
+
+		/**
+		 * Saves the properties to the resource.
+		 *
+		 * @param writer the XML writer writing the resource containing the properties
+		 * @param definitions the property definitions in a collection holding
+		 *        {@link PropertyClient.Property}-type values
+		 * @throws KNXMLException on error writing to the resource
+		 */
+		void save(XmlWriter writer, Collection<Property> definitions) throws KNXMLException;
 	}
 
 	/**
@@ -197,7 +218,7 @@ public class PropertyClient implements PropertyAccess
 	 *
 	 * @author B. Malinowsky
 	 */
-	public static final class PropertyKey implements Comparable
+	public static final class PropertyKey implements Comparable<PropertyKey>
 	{
 		/** Identifier for a property defined with global object type. */
 		public static final int GLOBAL_OBJTYPE = -1;
@@ -207,7 +228,6 @@ public class PropertyClient implements PropertyAccess
 
 		/**
 		 * Creates a new key for a global defined property.
-		 * <p>
 		 *
 		 * @param pid property identifier
 		 */
@@ -219,7 +239,6 @@ public class PropertyClient implements PropertyAccess
 
 		/**
 		 * Creates a new key for a property.
-		 * <p>
 		 *
 		 * @param objType object type of the property
 		 * @param pid property identifier
@@ -256,6 +275,7 @@ public class PropertyClient implements PropertyAccess
 		/* (non-Javadoc)
 		 * @see java.lang.Object#hashCode()
 		 */
+		@Override
 		public int hashCode()
 		{
 			return ot << 16 | id;
@@ -264,6 +284,7 @@ public class PropertyClient implements PropertyAccess
 		/* (non-Javadoc)
 		 * @see java.lang.Object#equals(java.lang.Object)
 		 */
+		@Override
 		public boolean equals(final Object obj)
 		{
 			if (obj instanceof PropertyKey) {
@@ -276,7 +297,8 @@ public class PropertyClient implements PropertyAccess
 		/* (non-Javadoc)
 		 * @see java.lang.Comparable#compareTo(java.lang.Object)
 		 */
-		public int compareTo(final Object o)
+		@Override
+		public int compareTo(final PropertyKey o)
 		{
 			final int rhs = o.hashCode();
 			return hashCode() < rhs ? -1 : hashCode() > rhs ? 1 : 0;
@@ -303,7 +325,6 @@ public class PropertyClient implements PropertyAccess
 
 		/**
 		 * Creates a new property object of the supplied information.
-		 * <p>
 		 *
 		 * @param pid property identifier
 		 * @param pidName name of the property ID
@@ -416,16 +437,16 @@ public class PropertyClient implements PropertyAccess
 		"Application Controller", "File Server Object", };
 
 
-	private final Map properties = Collections.synchronizedMap(new HashMap());
+	private final Map<PropertyKey, Property> properties = Collections.synchronizedMap(new HashMap<>());
 
 	private final PropertyAdapter pa;
 	// helper flag to determine local DM mode, mainly for detecting absence of PDT
 	// detection is currently done by querying PropertyAdapter.getName()
 	private final boolean local;
-	private final LogService logger;
+	private final Logger logger;
 
 	// maps object index to object type
-	private final List objectTypes = new ArrayList();
+	private final List<Pair> objectTypes = new ArrayList<>();
 	private final DPTXlator2ByteUnsigned tObjType;
 
 	/**
@@ -451,12 +472,11 @@ public class PropertyClient implements PropertyAccess
 			pa.close();
 			throw e;
 		}
-		logger = LogManager.getManager().getLogService("PC " + pa.getName());
+		logger = LogService.getLogger("calimero.mgmt.PC " + pa.getName());
 	}
 
 	/**
 	 * Returns the object type name associated to the requested object type.
-	 * <p>
 	 *
 	 * @param objType object type to get name for
 	 * @return object type name as string
@@ -466,51 +486,6 @@ public class PropertyClient implements PropertyAccess
 		if (objType < OBJECT_TYPE_NAMES.length)
 			return OBJECT_TYPE_NAMES[objType];
 		return "";
-	}
-
-	/**
-	 * Loads property definitions from a resource using the supplied
-	 * {@link ResourceHandler} or a default handler.
-	 * <p>
-	 *
-	 * @param resource the resource location identifier of a resource to load
-	 * @param handler the resource handler used for loading the property definitions, if
-	 *        <code>null</code>, a default handler is used
-	 * @return collection with loaded property definitions of type {@link Property}
-	 * @throws KNXException on errors in the property resource handler
-	 */
-	public static Collection loadDefinitions(final String resource, final ResourceHandler handler)
-		throws KNXException
-	{
-		final ResourceHandler rh = handler == null ? new XmlPropertyHandler() : handler;
-		return rh.load(resource);
-	}
-
-	/**
-	 * Saves the supplied property definitions to a resource using the supplied resource
-	 * handler.
-	 * <p>
-	 * To save definitions of a property client <code>client</code>, invoke the method
-	 * with the argument <code>client.getDefinitions().values()</code>.
-	 *
-	 * @param resource the resource location identifier to a resource for saving the
-	 *        definitions
-	 * @param definitions the property definitions to save, the collection holds entries
-	 *        of type {@link Property}
-	 * @param handler the resource handler used for saving the property definitions, if
-	 *        <code>null</code>, a default handler is used
-	 * @throws KNXException on errors in the property resource handler
-	 */
-	public static void saveDefinitions(final String resource, final Collection definitions,
-		final ResourceHandler handler) throws KNXException
-	{
-		// for saving an ordered collection based on property key order,
-		// the saving procedure has to be called with the Collection argument
-		// <code>new TreeMap(getDefinitions()).values()</code>, since our property map
-		// is not ordered for the time being
-
-		final ResourceHandler rh = handler == null ? new XmlPropertyHandler() : handler;
-		rh.save(resource, definitions);
 	}
 
 	/**
@@ -526,10 +501,10 @@ public class PropertyClient implements PropertyAccess
 	 * @param definitions collection of property definitions, containing entries of type
 	 *        {@link Property}
 	 */
-	public void addDefinitions(final Collection definitions)
+	public void addDefinitions(final Collection<Property> definitions)
 	{
-		for (final Iterator i = definitions.iterator(); i.hasNext();) {
-			final Property p = (Property) i.next();
+		for (final Iterator<Property> i = definitions.iterator(); i.hasNext();) {
+			final Property p = i.next();
 			properties.put(new PropertyKey(p.objType, p.id), p);
 		}
 	}
@@ -545,198 +520,118 @@ public class PropertyClient implements PropertyAccess
 	 *
 	 * @return property map, or <code>null</code> if no definitions loaded
 	 */
-	public Map getDefinitions()
+	public Map<PropertyKey, Property> getDefinitions()
 	{
 		return properties;
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.mgmt.PropertyAccess
-	 * #setProperty(int, int, int, java.lang.String)
-	 */
+	@Override
 	public void setProperty(final int objIndex, final int pid, final int position,
-		final String value) throws KNXException
+		final String value) throws KNXException, InterruptedException
 	{
-		try {
-			final DPTXlator t = createTranslator(objIndex, pid);
-			t.setValue(value);
-			setProperty(objIndex, pid, position, t.getItems(), t.getData());
-		}
-		catch (final InterruptedException e) {
-			throw new KNXTimeoutException("interrupted", e);
-		}
+		final DPTXlator t = createTranslator(objIndex, pid);
+		t.setValue(value);
+		setProperty(objIndex, pid, position, t.getItems(), t.getData());
 	}
 
 	/**
 	 * Gets the first property element using the associated property data type of the
 	 * requested property.
-	 * <p>
 	 *
 	 * @param objIndex interface object index in the device
 	 * @param pid property identifier
 	 * @return property element value represented as string
 	 * @throws KNXException on adapter errors while querying the property element or data
 	 *         type translation problems
+	 * @throws InterruptedException on thread interrupt
 	 */
-	public String getProperty(final int objIndex, final int pid) throws KNXException
+	public String getProperty(final int objIndex, final int pid) throws KNXException,
+		InterruptedException
 	{
 		return getPropertyTranslated(objIndex, pid, 1, 1).getValue();
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.mgmt.PropertyAccess
-	 * #setProperty(int, int, int, int, byte[])
-	 */
+	@Override
 	public void setProperty(final int objIndex, final int pid, final int start,
-		final int elements, final byte[] data) throws KNXException
+		final int elements, final byte[] data) throws KNXException, InterruptedException
 	{
-		try {
-			pa.setProperty(objIndex, pid, start, elements, data);
-		}
-		catch (final KNXException e) {
-			logger.error("set property failed", e);
-			throw e;
-		}
-		catch (final InterruptedException e) {
-			throw new KNXTimeoutException("interrupted", e);
-		}
+		pa.setProperty(objIndex, pid, start, elements, data);
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.mgmt.PropertyAccess#getProperty(int, int, int, int)
-	 */
+	@Override
 	public byte[] getProperty(final int objIndex, final int pid, final int start,
-		final int elements) throws KNXException
+		final int elements) throws KNXException, InterruptedException
 	{
-		try {
-			return pa.getProperty(objIndex, pid, start, elements);
-		}
-		catch (final KNXException e) {
-			logger.error("get property failed", e);
-			throw e;
-		}
-		catch (final InterruptedException e) {
-			throw new KNXTimeoutException("interrupted", e);
-		}
+		return pa.getProperty(objIndex, pid, start, elements);
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.mgmt.PropertyAccess
-	 * #getPropertyTranslated(int, int, int, int)
-	 */
+	@Override
 	public DPTXlator getPropertyTranslated(final int objIndex, final int pid,
-		final int start, final int elements) throws KNXException
+		final int start, final int elements) throws KNXException, InterruptedException
 	{
-		try {
-			final DPTXlator t = createTranslator(objIndex, pid);
-			t.setData(getProperty(objIndex, pid, start, elements));
-			return t;
-		}
-		catch (final InterruptedException e) {
-			throw new KNXTimeoutException("interrupted", e);
-		}
+		final DPTXlator t = createTranslator(objIndex, pid);
+		t.setData(getProperty(objIndex, pid, start, elements));
+		return t;
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.mgmt.PropertyAccess#getDescription(int, int)
-	 */
+	@Override
 	public Description getDescription(final int objIndex, final int pid)
-		throws KNXException
+		throws KNXException, InterruptedException
 	{
 		if (pid == 0)
 			throw new KNXIllegalArgumentException("pid has to be > 0");
-		try {
-			return createDesc(objIndex, pa.getDescription(objIndex, pid, 0));
-		}
-		catch (final KNXException e) {
-			logger.error("get description failed", e);
-			throw e;
-		}
-		catch (final InterruptedException e) {
-			throw new KNXTimeoutException("interrupted", e);
-		}
+		return createDesc(objIndex, pa.getDescription(objIndex, pid, 0));
 	}
 
 	/**
 	 * Gets the property description based on the property index.
-	 * <p>
 	 *
 	 * @param objIndex interface object index in the device
 	 * @param propIndex property index in the object
 	 * @return a property description object
 	 * @throws KNXException on adapter errors while querying the description
 	 */
+	@Override
 	public Description getDescriptionByIndex(final int objIndex, final int propIndex)
-		throws KNXException
+		throws KNXException, InterruptedException
 	{
-		try {
-			return createDesc(objIndex, pa.getDescription(objIndex, 0, propIndex));
-		}
-		catch (final KNXException e) {
-			logger.error("get description failed", e);
-			throw e;
-		}
-		catch (final InterruptedException e) {
-			throw new KNXTimeoutException("interrupted", e);
-		}
+		return createDesc(objIndex, pa.getDescription(objIndex, 0, propIndex));
 	}
 
 	/**
 	 * Does a property description scan of the properties in all interface objects.
-	 * <p>
 	 *
-	 * @param allProperties <code>true</code> to scan all property descriptions in the
-	 *        interface objects, <code>false</code> to only scan the object type
-	 *        descriptions, i.e., ({@link PropertyAccess.PID#OBJECT_TYPE})
-	 * @return a list containing the property descriptions of type {@link Description}
+	 * @param allProperties <code>true</code> to scan all property descriptions in the interface
+	 *        objects, <code>false</code> to only scan the object type descriptions, i.e.,
+	 *        {@link PropertyAccess.PID#OBJECT_TYPE}
+	 * @param consumer invoked on every property read during the scan, taking a property
+	 *        {@link Description} argument
 	 * @throws KNXException on adapter errors while querying the descriptions
+	 * @throws InterruptedException on thread interrupt
 	 */
-	public List scanProperties(final boolean allProperties) throws KNXException
+	public void scanProperties(final boolean allProperties, final Consumer<Description> consumer)
+		throws KNXException, InterruptedException
 	{
-		final List scan = new ArrayList();
-		for (int index = 0;; ++index) {
-			final List l = scanProperties(index, allProperties);
-			if (l.size() == 0)
-				break;
-			scan.addAll(l);
-		}
-		return scan;
+		for (int index = 0; scan(index, allProperties, consumer) > 0; ++index);
 	}
 
 	/**
 	 * Does a property description scan of the properties of one interface object.
-	 * <p>
 	 *
 	 * @param objIndex interface object index in the device
-	 * @param allProperties <code>true</code> to scan all property descriptions in that
-	 *        interface object, <code>false</code> to only scan the object type
-	 *        description of the interface object specified by <code>objIndex</code>,
-	 *        i.e., ({@link PropertyAccess.PID#OBJECT_TYPE})
-	 * @return a list containing the property descriptions of type {@link Description}
+	 * @param allProperties <code>true</code> to scan all property descriptions in that interface
+	 *        object, <code>false</code> to only scan the object type description of the interface
+	 *        object specified by <code>objIndex</code>, i.e.,
+	 *        {@link PropertyAccess.PID#OBJECT_TYPE}
+	 * @param consumer invoked on every property read during the scan, taking a property
+	 *        {@link Description} argument
 	 * @throws KNXException on adapter errors while querying the descriptions
+	 * @throws InterruptedException on thread interrupt
 	 */
-	public List scanProperties(final int objIndex, final boolean allProperties)
-		throws KNXException
+	public void scanProperties(final int objIndex, final boolean allProperties,
+		final Consumer<Description> consumer) throws KNXException, InterruptedException
 	{
-		final List scan = new ArrayList();
-		// property with index 0 is description of object type
-		// rest are ordinary properties of the object
-		try {
-			scan.add(createDesc(objIndex, pa.getDescription(objIndex, 0, 0)));
-			if (allProperties)
-				for (int i = 1;; ++i)
-					scan.add(createDesc(objIndex, pa.getDescription(objIndex, 0, i)));
-		}
-		catch (final KNXException e) {
-			if (!KNXRemoteException.class.equals(e.getClass())) {
-				logger.error("scan properties failed", e);
-				throw e;
-			}
-		}
-		catch (final InterruptedException e) {
-			throw new KNXTimeoutException("interrupted", e);
-		}
-		return scan;
+		scan(objIndex, allProperties, consumer);
 	}
 
 	/**
@@ -752,15 +647,36 @@ public class PropertyClient implements PropertyAccess
 
 	/**
 	 * Closes the property client and the used adapter.
-	 * <p>
 	 */
+	@Override
 	public void close()
 	{
 		if (pa.isOpen()) {
 			pa.close();
 			logger.info("closed property client");
-			LogManager.getManager().removeLogService(logger.getName());
 		}
+	}
+
+	private int scan(final int objIndex, final boolean allProperties,
+		final Consumer<Description> consumer) throws KNXException, InterruptedException
+	{
+		int i = 0;
+		try {
+			// property with index 0 is description of object type
+			// rest are ordinary properties of the object
+			for (;; ++i) {
+				consumer.accept(createDesc(objIndex, pa.getDescription(objIndex, 0, i)));
+				if (!allProperties)
+					return 1;
+			}
+		}
+		catch (final KNXException e) {
+			if (!KNXRemoteException.class.equals(e.getClass())) {
+				logger.error("scan properties failed", e);
+				throw e;
+			}
+		}
+		return i;
 	}
 
 	private Description createDesc(final int oi, final byte[] desc) throws KNXException,
@@ -770,8 +686,8 @@ public class PropertyClient implements PropertyAccess
 		try {
 			d.setCurrentElements(pa.getProperty(oi, d.getPID(), 0, 1));
 		} catch (final KNXRemoteException e) {
-			logger.warn("failed to get current number of elements for OI " + oi + " PID " + d.getPID() + ": "
-					+ e.getMessage());
+			logger.warn("failed to get current number of elements for OI {} PID {}: {}", oi, d.getPID(),
+					e.getMessage());
 		}
 		// workaround for PDT on local DM
 		if (local)
@@ -779,11 +695,11 @@ public class PropertyClient implements PropertyAccess
 		return d;
 	}
 
-	private int getObjectType(final int objIndex, final boolean queryObject)
-		throws KNXException, InterruptedException
+	private int getObjectType(final int objIndex, final boolean queryObject) throws KNXException,
+		InterruptedException
 	{
-		for (final Iterator i = objectTypes.iterator(); i.hasNext();) {
-			final Pair p = (Pair) i.next();
+		for (final Iterator<Pair> i = objectTypes.iterator(); i.hasNext();) {
+			final Pair p = i.next();
 			if (p.oindex == objIndex)
 				return p.otype;
 		}
@@ -792,8 +708,7 @@ public class PropertyClient implements PropertyAccess
 		throw new KNXException("couldn't deduce object type");
 	}
 
-	private int queryObjectType(final int objIndex) throws KNXException,
-		InterruptedException
+	private int queryObjectType(final int objIndex) throws KNXException, InterruptedException
 	{
 		tObjType.setData(pa.getProperty(objIndex, 1, 1, 1));
 		objectTypes.add(new Pair(objIndex, tObjType.getValueUnsigned()));
@@ -805,10 +720,10 @@ public class PropertyClient implements PropertyAccess
 	{
 		final int ot = getObjectType(objIndex, true);
 		int pdt = -1;
-		Property p = (Property) properties.get(new PropertyKey(ot, pid));
+		Property p = properties.get(new PropertyKey(ot, pid));
 		// if no property found, lookup global pid
 		if (p == null && pid < 50)
-			p = (Property) properties.get(new PropertyKey(pid));
+			p = properties.get(new PropertyKey(pid));
 		if (p != null) {
 			if (p.dpt != null)
 				try {
@@ -835,7 +750,7 @@ public class PropertyClient implements PropertyAccess
 				+ "), PDT " + pdt + " ");
 	}
 
-	private static class XmlPropertyHandler implements ResourceHandler
+	public static class XmlPropertyDefinitions implements ResourceHandler
 	{
 		private static final String PROPDEFS_TAG = "propertyDefinitions";
 		private static final String OBJECT_TAG = "object";
@@ -850,98 +765,90 @@ public class PropertyClient implements PropertyAccess
 		private static final String WRITE_ATTR = "writeEnabled";
 		private static final String USAGE_TAG = "usage";
 
-		XmlPropertyHandler()
-		{}
-
-		/* (non-Javadoc)
-		 * @see tuwien.auto.calimero.mgmt.PropertyClient.ResourceHandler#load
-		 * (java.lang.String)
-		 */
-		public Collection load(final String resource) throws KNXException
+		@Override
+		public Collection<Property> load(final String resource) throws KNXMLException
 		{
-			final XMLReader r = XMLFactory.getInstance().createXMLReader(resource);
-			final List list = new ArrayList(30);
+			try (final XmlReader r = XmlInputFactory.newInstance().createXMLReader(resource)) {
+				return load(r);
+			}
+		}
+
+		@Override
+		public Collection<Property> load(final XmlReader reader) throws KNXMLException
+		{
+			final List<Property> list = new ArrayList<>();
 			int objType = -1;
 			try {
-				if (r.read() != XMLReader.START_TAG
-					|| !r.getCurrent().getName().equals(PROPDEFS_TAG))
+				if (reader.nextTag() != XmlReader.START_ELEMENT || !reader.getLocalName().equals(PROPDEFS_TAG))
 					throw new KNXMLException("no property defintions");
-				while (r.read() != XMLReader.END_DOC) {
-					final Element e = r.getCurrent();
-					if (r.getPosition() == XMLReader.START_TAG) {
-						if (e.getName().equals(OBJECT_TAG)) {
+				while (reader.hasNext()) {
+					final int event = reader.next();
+					if (event == XmlReader.START_ELEMENT) {
+						if (reader.getLocalName().equals(OBJECT_TAG)) {
 							// on no type attribute, toInt() throws, that's ok
-							final String type = e.getAttribute(OBJECTTYPE_ATTR);
+							final String type = reader.getAttributeValue("", OBJECTTYPE_ATTR);
 							objType = "global".equals(type) ? -1 : toInt(type);
 						}
-						else if (e.getName().equals(PROPERTY_TAG)) {
-							r.complete(e);
-							parseRW(e.getAttribute(RW_ATTR));
-							list.add(new Property(toInt(e.getAttribute(PID_ATTR)),
-									e.getAttribute(PIDNAME_ATTR), e.getAttribute(NAME_ATTR),
-									objType, toInt(e.getAttribute(PDT_ATTR)),
-									e.getAttribute(DPT_ATTR)));
+						else if (reader.getLocalName().equals(PROPERTY_TAG)) {
+							parseRW(reader.getAttributeValue("", RW_ATTR));
+							list.add(new Property(toInt(reader.getAttributeValue("", PID_ATTR)),
+									reader.getAttributeValue("", PIDNAME_ATTR), reader.getAttributeValue("", NAME_ATTR),
+									objType, toInt(reader.getAttributeValue("", PDT_ATTR)),
+									reader.getAttributeValue("", DPT_ATTR)));
 						}
 					}
-					else if (r.getPosition() == XMLReader.END_TAG
-							&& e.getName().equals(PROPDEFS_TAG))
+					else if (event == XmlReader.END_ELEMENT && reader.getLocalName().equals(PROPDEFS_TAG))
 						break;
 				}
 				return list;
 			}
 			catch (final KNXFormatException e) {
-				throw new KNXException("loading property definitions, " + e.getMessage());
-			}
-			finally {
-				r.close();
+				throw new KNXMLException("loading property definitions, " + e.getMessage());
 			}
 		}
 
-		/* (non-Javadoc)
-		 * @see tuwien.auto.calimero.mgmt.PropertyClient.ResourceHandler#save
-		 * (java.lang.String, java.util.Collection)
-		 */
-		public void save(final String resource, final Collection properties) throws KNXException
+		@Override
+		public void save(final String resource, final Collection<Property> definitions)
 		{
-			final XMLWriter w = XMLFactory.getInstance().createXMLWriter(resource);
-			try {
-				w.writeDeclaration(true, "UTF-8");
-				w.writeComment("Calimero 2 " + Settings.getLibraryVersion()
-					+ " KNX property definitions, saved on " + new Date().toString());
-				w.writeElement(PROPDEFS_TAG, null, null);
-				final int noType = -2;
-				int objType = noType;
-				for (final Iterator i = properties.iterator(); i.hasNext();) {
-					final Property p = (Property) i.next();
-					if (p.objType != objType) {
-						if (objType != noType)
-							w.endElement();
-						objType = p.objType;
-						final List att = new ArrayList();
-						att.add(new Attribute(OBJECTTYPE_ATTR, objType == -1 ? "global"
-							: Integer.toString(objType)));
-						w.writeElement(OBJECT_TAG, att, null);
-					}
-					// property attributes
-					final List att = new ArrayList();
-					att.add(new Attribute(PID_ATTR, Integer.toString(p.id)));
-					att.add(new Attribute(PIDNAME_ATTR, p.name));
-					att.add(new Attribute(NAME_ATTR, p.propName));
-					att.add(new Attribute(PDT_ATTR, p.pdt == -1 ? "<tbd>" : Integer.toString(p.pdt)));
-					if (p.dpt != null && p.dpt.length() > 0)
-						att.add(new Attribute(DPT_ATTR, p.dpt));
-					// TOOD why don't we add r/w attribute values?
-					att.add(new Attribute(RW_ATTR, ""));
-					att.add(new Attribute(WRITE_ATTR, ""));
-					// write property
-					w.writeElement(PROPERTY_TAG, att, null);
-					w.writeElement(USAGE_TAG, null, null);
-					w.endElement();
-					w.endElement();
-				}
+			try (final XmlWriter w = XmlOutputFactory.newInstance().createXMLWriter(resource)) {
+				w.writeStartDocument("UTF-8", "1.0");
+				save(w, definitions);
 			}
-			finally {
-				w.close();
+		}
+
+		@Override
+		public void save(final XmlWriter writer, final Collection<Property> definitions)
+		{
+			writer.writeComment("Calimero v" + Settings.getLibraryVersion()
+					+ " KNX property definitions, saved on " + new Date().toString());
+			writer.writeStartElement(PROPDEFS_TAG);
+			final int noType = -2;
+			int objType = noType;
+			for (final Iterator<Property> i = definitions.iterator(); i.hasNext();) {
+				final Property p = i.next();
+				if (p.objType != objType) {
+					if (objType != noType)
+						writer.writeEndElement();
+					objType = p.objType;
+					writer.writeStartElement(OBJECT_TAG);
+					writer.writeAttribute(OBJECTTYPE_ATTR, objType == -1 ? "global"
+							: Integer.toString(objType));
+				}
+				// property attributes
+				writer.writeStartElement(PROPERTY_TAG);
+				writer.writeAttribute(PID_ATTR, Integer.toString(p.id));
+				writer.writeAttribute(PIDNAME_ATTR, p.name);
+				writer.writeAttribute(NAME_ATTR, p.propName);
+				writer.writeAttribute(PDT_ATTR, p.pdt == -1 ? "<tbd>" : Integer.toString(p.pdt));
+				if (p.dpt != null && p.dpt.length() > 0)
+					writer.writeAttribute(DPT_ATTR, p.dpt);
+				// TOOD why don't we add r/w attribute values?
+				writer.writeAttribute(RW_ATTR, "");
+				writer.writeAttribute(WRITE_ATTR, "");
+				// write property
+				writer.writeStartElement(USAGE_TAG);
+				writer.writeEndElement();
+				writer.writeEndElement();
 			}
 		}
 

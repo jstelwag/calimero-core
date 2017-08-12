@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2015 B. Malinowsky
+    Copyright (c) 2015, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -36,18 +36,19 @@
 
 package tuwien.auto.calimero.link;
 
+import org.slf4j.Logger;
+
 import tuwien.auto.calimero.CloseEvent;
 import tuwien.auto.calimero.FrameEvent;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 import tuwien.auto.calimero.cemi.CEMI;
 import tuwien.auto.calimero.cemi.CEMIBusMon;
 import tuwien.auto.calimero.cemi.CEMIFactory;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
 import tuwien.auto.calimero.link.medium.KNXMediumSettings;
 import tuwien.auto.calimero.link.medium.PLSettings;
 import tuwien.auto.calimero.link.medium.RawFrame;
 import tuwien.auto.calimero.link.medium.RawFrameFactory;
-import tuwien.auto.calimero.log.LogManager;
 import tuwien.auto.calimero.log.LogService;
 
 /**
@@ -68,25 +69,26 @@ public abstract class AbstractMonitor implements KNXNetworkMonitor
 {
 	/** Implements KNXListener to listen to the monitor connection. */
 	protected final MonitorNotifier notifier;
-	protected final LogService logger;
+	protected final Logger logger;
 
-	final Object conn;
+	final AutoCloseable conn;
 
 	private volatile boolean closed;
 	private KNXMediumSettings medium;
 	private final String name;
 
-	private static final class MonitorNotifier extends EventNotifier
+	private static final class MonitorNotifier extends EventNotifier<LinkListener>
 	{
 		volatile boolean decode;
 		private boolean extBusmon;
 
-		MonitorNotifier(final Object source, final LogService logger, final boolean extBusmon)
+		MonitorNotifier(final Object source, final Logger logger, final boolean extBusmon)
 		{
 			super(source, logger);
 			this.extBusmon = extBusmon;
 		}
 
+		@Override
 		public void frameReceived(final FrameEvent e)
 		{
 			try {
@@ -123,29 +125,26 @@ public abstract class AbstractMonitor implements KNXNetworkMonitor
 				}
 				addEvent(new Indication(mfe));
 			}
-			catch (final KNXFormatException kfe) {
-				logger.warn("unspecified frame event - ignored", kfe);
-			}
-			catch (final RuntimeException rte) {
-				logger.warn("unspecified frame event - ignored", rte);
+			catch (final KNXFormatException | RuntimeException ex) {
+				logger.warn("unspecified frame event - ignored", ex);
 			}
 		}
 
+		@Override
 		public void connectionClosed(final CloseEvent e)
 		{
 			((AbstractMonitor) source).closed = true;
 			super.connectionClosed(e);
 			logger.info("monitor closed");
-			LogManager.getManager().removeLogService(logger.getName());
 		}
 	}
 
-	protected AbstractMonitor(final Object conn, final String name,
+	protected AbstractMonitor(final AutoCloseable conn, final String name,
 		final KNXMediumSettings settings)
 	{
 		this.conn = conn;
 		this.name = name;
-		logger = LogManager.getManager().getLogService("calimero.link." + getName());
+		logger = LogService.getLogger("calimero.link." + getName());
 
 		if (settings instanceof PLSettings)
 			logger.info("power-line medium, assuming BCU has extended busmonitor enabled");
@@ -155,6 +154,7 @@ public abstract class AbstractMonitor implements KNXNetworkMonitor
 		notifier.start();
 	}
 
+	@Override
 	public final void setKNXMedium(final KNXMediumSettings settings)
 	{
 		if (settings == null)
@@ -165,37 +165,44 @@ public abstract class AbstractMonitor implements KNXNetworkMonitor
 		medium = settings;
 	}
 
+	@Override
 	public final KNXMediumSettings getKNXMedium()
 	{
 		return medium;
 	}
 
+	@Override
 	public void addMonitorListener(final LinkListener l)
 	{
 		notifier.addListener(l);
 	}
 
+	@Override
 	public void removeMonitorListener(final LinkListener l)
 	{
 		notifier.removeListener(l);
 	}
 
+	@Override
 	public final void setDecodeRawFrames(final boolean decode)
 	{
 		notifier.decode = decode;
 		logger.info((decode ? "enable" : "disable") + " decoding of raw frames");
 	}
 
+	@Override
 	public final String getName()
 	{
 		return name;
 	}
 
+	@Override
 	public boolean isOpen()
 	{
 		return !closed;
 	}
 
+	@Override
 	public final void close()
 	{
 		synchronized (this) {
@@ -211,13 +218,14 @@ public abstract class AbstractMonitor implements KNXNetworkMonitor
 		}
 		onClose();
 		try {
-//			if (conn != null)
-//				conn.close();
+			if (conn != null)
+				conn.close();
 		}
 		catch (final Exception ignore) {}
 		notifier.quit();
 	}
 
+	@Override
 	public String toString()
 	{
 		return "monitor " + getName() + " " + medium.getMediumString() + " medium"
@@ -233,9 +241,8 @@ public abstract class AbstractMonitor implements KNXNetworkMonitor
 
 	/**
 	 * Invoked on {@link #close()} to allow the communication protocol to leave busmonitor mode.
-	 *
-	 * @throws InterruptedException on interrupted thread
 	 */
+	@SuppressWarnings("unused")
 	protected void leaveBusmonitor() throws InterruptedException
 	{}
 }

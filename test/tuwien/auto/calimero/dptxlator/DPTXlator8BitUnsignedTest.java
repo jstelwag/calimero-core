@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2012 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -39,10 +39,9 @@ package tuwien.auto.calimero.dptxlator;
 import java.util.Arrays;
 
 import junit.framework.TestCase;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 import tuwien.auto.calimero.Util;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.log.LogManager;
 
 /**
  * @author B. Malinowsky
@@ -87,27 +86,18 @@ public class DPTXlator8BitUnsignedTest extends TestCase
 	/* (non-Javadoc)
 	 * @see junit.framework.TestCase#setUp()
 	 */
+	@Override
 	protected void setUp() throws Exception
 	{
 		super.setUp();
-		LogManager.getManager().addWriter("DPTXlator", Util.getLogWriter());
+		Util.setupLogging("DPTXlator");
 		t = new DPTXlator8BitUnsigned(dpts[5]);
-	}
-
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#tearDown()
-	 */
-	protected void tearDown() throws Exception
-	{
-		Thread.sleep(100);
-		LogManager.getManager().removeWriter("DPTXlator", Util.getLogWriter());
-		super.tearDown();
 	}
 
 	/**
 	 * Test method for
 	 * {@link tuwien.auto.calimero.dptxlator.DPTXlator8BitUnsigned#setValues(java.lang.String[])}.
-	 * 
+	 *
 	 * @throws KNXFormatException
 	 */
 	public final void testSetValues() throws KNXFormatException
@@ -131,7 +121,7 @@ public class DPTXlator8BitUnsignedTest extends TestCase
 	/**
 	 * Test method for
 	 * {@link tuwien.auto.calimero.dptxlator.DPTXlator8BitUnsigned#getAllValues()}.
-	 * 
+	 *
 	 * @throws KNXFormatException
 	 */
 	public final void testGetAllValues() throws KNXFormatException
@@ -152,7 +142,7 @@ public class DPTXlator8BitUnsignedTest extends TestCase
 	/**
 	 * Test method for
 	 * {@link tuwien.auto.calimero.dptxlator.DPTXlator8BitUnsigned#setValue(java.lang.String)}.
-	 * 
+	 *
 	 * @throws KNXFormatException
 	 */
 	public final void testSetValueString() throws KNXFormatException
@@ -168,7 +158,7 @@ public class DPTXlator8BitUnsignedTest extends TestCase
 	/**
 	 * Test method for
 	 * {@link tuwien.auto.calimero.dptxlator.DPTXlator8BitUnsigned#getValue()}.
-	 * 
+	 *
 	 * @throws KNXFormatException
 	 */
 	public final void testGetValue() throws KNXFormatException
@@ -214,7 +204,7 @@ public class DPTXlator8BitUnsignedTest extends TestCase
 	/**
 	 * Test method for
 	 * {@link tuwien.auto.calimero.dptxlator.DPTXlator8BitUnsigned#getData(byte[], int)}.
-	 * 
+	 *
 	 * @throws KNXFormatException
 	 */
 	public final void testGetDataByteArrayInt() throws KNXFormatException
@@ -240,7 +230,7 @@ public class DPTXlator8BitUnsignedTest extends TestCase
 			assertEquals(data[i], d[i]);
 			assertEquals(0, d[i + 1]);
 		}
-		
+
 		final DPTXlator8BitUnsigned x = new DPTXlator8BitUnsigned(dpts[4]);
 		try {
 			// reserved, shall not be used
@@ -279,7 +269,7 @@ public class DPTXlator8BitUnsignedTest extends TestCase
 	/**
 	 * Test method for
 	 * {@link tuwien.auto.calimero.dptxlator.DPTXlator8BitUnsigned#getValueUnsigned()}.
-	 * 
+	 *
 	 * @throws KNXFormatException
 	 */
 	public final void testGetValueUnsigned() throws KNXFormatException
@@ -304,7 +294,7 @@ public class DPTXlator8BitUnsignedTest extends TestCase
 	/**
 	 * Test method for
 	 * {@link tuwien.auto.calimero.dptxlator.DPTXlator8BitUnsigned#getValueUnscaled()}.
-	 * 
+	 *
 	 * @throws KNXFormatException
 	 */
 	public final void testGetValueShortUnscaled() throws KNXFormatException
@@ -350,7 +340,7 @@ public class DPTXlator8BitUnsignedTest extends TestCase
 	/**
 	 * Test method for
 	 * {@link tuwien.auto.calimero.dptxlator.DPTXlator8BitUnsigned#setValue(int)}.
-	 * 
+	 *
 	 * @throws KNXFormatException
 	 */
 	public final void testSetValueInt() throws KNXFormatException
@@ -375,7 +365,7 @@ public class DPTXlator8BitUnsignedTest extends TestCase
 	/**
 	 * Test method for
 	 * {@link tuwien.auto.calimero.dptxlator.DPTXlator8BitUnsigned#setValueUnscaled(int)}.
-	 * 
+	 *
 	 * @throws KNXFormatException
 	 */
 	public final void testSetValueUnscaled() throws KNXFormatException

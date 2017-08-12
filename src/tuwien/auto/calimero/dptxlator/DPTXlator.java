@@ -40,10 +40,11 @@ import java.util.AbstractCollection;
 import java.util.Arrays;
 import java.util.Map;
 
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.exception.KNXIllegalStateException;
-import tuwien.auto.calimero.log.LogManager;
+import org.slf4j.Logger;
+
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXIllegalStateException;
 import tuwien.auto.calimero.log.LogService;
 
 /**
@@ -76,12 +77,12 @@ public abstract class DPTXlator
 	/**
 	 * Name of the log service used in DPT translators.
 	 */
-	public static final String LOG_SERVICE = "DPTXlator";
+	public static final String LOG_SERVICE = "calimero.dptxlator.DptXlator";
 
 	/**
 	 * Logger object for all translators.
 	 */
-	protected static final LogService logger = LogManager.getManager().getLogService(LOG_SERVICE);
+	protected static final Logger logger = LogService.getLogger(LOG_SERVICE);
 
 	/**
 	 * Array containing KNX data type values.
@@ -358,7 +359,7 @@ public abstract class DPTXlator
 	 * @return subtypes as {@link Map}, key is the subtype ID of type string, value of
 	 *         type {@link DPT}
 	 */
-	public abstract Map getSubTypes();
+	public abstract Map<String, DPT> getSubTypes();
 
 	/**
 	 * Returns the KNX data type size in bytes for one value item.
@@ -382,6 +383,7 @@ public abstract class DPTXlator
 	 *
 	 * @return a string representation of the translation values
 	 */
+	@Override
 	public String toString()
 	{
 		return "DPT " + dpt.getID() + " " + Arrays.asList(getAllValues()).toString();
@@ -412,14 +414,13 @@ public abstract class DPTXlator
 	 * @param dptID the ID as string of the datapoint type to set
 	 * @throws KNXFormatException on DPT not available
 	 */
-	protected void setTypeID(final Map availableTypes, final String dptID) throws KNXFormatException
+	protected void setTypeID(final Map<String, DPT> availableTypes, final String dptID)
+		throws KNXFormatException
 	{
-		final DPT t = (DPT) availableTypes.get(dptID);
+		final DPT t = availableTypes.get(dptID);
 		if (t == null) {
-			// don't call logThrow since dpt is not set yet
-			final String s = "DPT " + dptID + " is not available";
-			logger.warn(s);
-			throw new KNXFormatException(s, dptID);
+			// don't call newException because dpt is not set
+			throw new KNXFormatException("DPT " + dptID + " is not available", dptID);
 		}
 		dpt = t;
 	}
@@ -438,7 +439,7 @@ public abstract class DPTXlator
 	 * @return subtypes as {@link Map}, key is the subtype ID of type string, value of
 	 *         type {@link DPT}
 	 */
-	protected static Map getSubTypesStatic()
+	protected static Map<String, DPT> getSubTypesStatic()
 	{
 		throw new KNXIllegalStateException("invoke on specific translator");
 	}
@@ -473,8 +474,7 @@ public abstract class DPTXlator
 		return (short) (value & 0xff);
 	}
 
-	final KNXFormatException newException(final String msg, final String item,
-		final Exception cause)
+	final KNXFormatException newException(final String msg, final String item, final Exception cause)
 	{
 		final String s = dpt.getID() + " " + dpt.getDescription() + ": " + msg;
 		return new KNXFormatException(s, item, cause);

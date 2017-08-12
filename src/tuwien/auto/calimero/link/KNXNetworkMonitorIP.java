@@ -40,10 +40,12 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 
-import tuwien.auto.calimero.exception.KNXException;
+import tuwien.auto.calimero.KNXException;
 import tuwien.auto.calimero.knxnetip.KNXnetIPConnection;
 import tuwien.auto.calimero.knxnetip.KNXnetIPTunnel;
 import tuwien.auto.calimero.link.medium.KNXMediumSettings;
+
+import static tuwien.auto.calimero.knxnetip.KNXnetIPTunnel.TunnelingLayer.BusMonitorLayer;
 
 /**
  * Implementation of the KNX network monitor link based on the KNXnet/IP protocol, using a
@@ -75,7 +77,7 @@ public class KNXNetworkMonitorIP extends AbstractMonitor
 		final boolean useNAT, final KNXMediumSettings settings)
 			throws KNXException, InterruptedException
 	{
-		this(new KNXnetIPTunnel(KNXnetIPTunnel.BUSMONITOR_LAYER, localEndpoint(localEP), remoteEP,
+		this(new KNXnetIPTunnel(BusMonitorLayer, localEndpoint(localEP), remoteEP,
 				useNAT), settings);
 		logger.info("in busmonitor mode - ready to receive");
 		((KNXnetIPTunnel) super.conn).addConnectionListener(notifier);
@@ -92,11 +94,6 @@ public class KNXNetworkMonitorIP extends AbstractMonitor
 	protected KNXNetworkMonitorIP(final KNXnetIPConnection conn, final KNXMediumSettings settings)
 	{
 		super(conn, monitorName(conn.getRemoteAddress()), settings);
-	}
-
-	protected void onClose()
-	{
-		((KNXnetIPConnection) conn).close();
 	}
 
 	private static InetSocketAddress localEndpoint(final InetSocketAddress local)

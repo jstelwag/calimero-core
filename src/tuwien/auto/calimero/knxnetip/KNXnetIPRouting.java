@@ -36,7 +36,11 @@
 
 package tuwien.auto.calimero.knxnetip;
 
+import static tuwien.auto.calimero.knxnetip.KNXnetIPConnection.BlockingMode.NonBlocking;
+
 import java.io.IOException;
+import java.io.InterruptedIOException;
+import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.MulticastSocket;
@@ -44,24 +48,26 @@ import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.EventListener;
 import java.util.Iterator;
 import java.util.List;
 
 import tuwien.auto.calimero.CloseEvent;
 import tuwien.auto.calimero.DataUnitBuilder;
+import tuwien.auto.calimero.KNXException;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXIllegalStateException;
 import tuwien.auto.calimero.KNXListener;
+import tuwien.auto.calimero.KNXTimeoutException;
 import tuwien.auto.calimero.cemi.CEMI;
 import tuwien.auto.calimero.cemi.CEMILData;
-import tuwien.auto.calimero.exception.KNXException;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.exception.KNXTimeoutException;
 import tuwien.auto.calimero.knxnetip.servicetype.KNXnetIPHeader;
+import tuwien.auto.calimero.knxnetip.servicetype.PacketHelper;
+import tuwien.auto.calimero.knxnetip.servicetype.RoutingBusy;
 import tuwien.auto.calimero.knxnetip.servicetype.RoutingIndication;
 import tuwien.auto.calimero.knxnetip.servicetype.RoutingLostMessage;
-import tuwien.auto.calimero.log.LogLevel;
-import tuwien.auto.calimero.log.LogManager;
+import tuwien.auto.calimero.log.LogService;
+import tuwien.auto.calimero.log.LogService.LogLevel;
 
 /**
  * KNXnet/IP connection using the KNXnet/IP routing protocol.
@@ -116,7 +122,7 @@ public class KNXnetIPRouting extends ConnectionBase
 	// mode is enabled, sent packets are buffered, and subsequently discarded when received again
 	// shortly after (and also removed from this buffer again).
 	// This list holds cEMI frames, but basically only the byte array representations are required.
-	private final List loopbackFrames = new ArrayList();
+	private final List<CEMILData> loopbackFrames = new ArrayList<>();
 	private static final int maxLoopbackQueueSize = 20;
 
 
@@ -135,8 +141,7 @@ public class KNXnetIPRouting extends ConnectionBase
 	 *        ); value of <code>mcGroup &ge; </code>{@value #DEFAULT_MULTICAST}
 	 * @throws KNXException on socket error, or if joining to group failed
 	 */
-	public KNXnetIPRouting(final NetworkInterface netIf, final InetAddress mcGroup)
-		throws KNXException
+	public KNXnetIPRouting(final NetworkInterface netIf, final InetAddress mcGroup) throws KNXException
 	{
 		this(mcGroup);
 		init(netIf, true, true);
@@ -168,26 +173,30 @@ public class KNXnetIPRouting extends ConnectionBase
 	 * @param mode arbitrary value, does not influence behavior, since routing is always a
 	 *        unconfirmed, nonblocking service
 	 */
+	@Override
 	public void send(final CEMI frame, final BlockingMode mode)
 		throws KNXConnectionClosedException
 	{
 		try {
 			if (loopbackEnabled) {
 				synchronized (loopbackFrames) {
-					loopbackFrames.add(frame);
+					loopbackFrames.add((CEMILData) frame);
 				}
-				logger.trace("add to multicast loopback frame buffer: " + frame);
+				logger.trace("add to multicast loopback frame buffer: {}", frame);
 			}
-			super.send(frame, NONBLOCKING);
+			super.send(frame, NonBlocking);
 			// we always succeed...
 			setState(OK);
 		}
-		catch (final KNXTimeoutException ignore) {}
+		catch (KNXTimeoutException | InterruptedException ignore) {}
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.knxnetip.KNXnetIPConnection#getName()
-	 */
+	public final void send(final RoutingBusy busy) throws KNXConnectionClosedException
+	{
+		send(PacketHelper.toPacket(busy));
+	}
+
+	@Override
 	public String getName()
 	{
 		return "KNXnet/IP Routing " + super.getName();
@@ -287,7 +296,7 @@ public class KNXnetIPRouting extends ConnectionBase
 	{
 		ctrlEndpt = new InetSocketAddress(multicast, DEFAULT_PORT);
 		dataEndpt = ctrlEndpt;
-		logger = LogManager.getManager().getLogService(getName());
+		logger = LogService.getLogger("calimero.knxnetip." + getName());
 
 		MulticastSocket s = null;
 		try {
@@ -296,7 +305,7 @@ public class KNXnetIPRouting extends ConnectionBase
 				s.setNetworkInterface(netIf);
 				// port number is not used in join group
 				s.joinGroup(new InetSocketAddress(multicast, 0), netIf);
-				logger.info("using network interface " + netIf.getName());
+				logger.info("using network interface {}", netIf.getName());
 			}
 			else {
 				try {
@@ -332,11 +341,7 @@ public class KNXnetIPRouting extends ConnectionBase
 		setState(OK);
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.knxnetip.ConnectionBase#handleServiceType
-	 * (tuwien.auto.calimero.knxnetip.servicetype.KNXnetIPHeader, byte[], int,
-	 * java.net.InetAddress, int)
-	 */
+	@Override
 	protected boolean handleServiceType(final KNXnetIPHeader h, final byte[] data,
 		final int offset, final InetAddress src, final int port)
 		throws KNXFormatException, IOException
@@ -356,10 +361,14 @@ public class KNXnetIPRouting extends ConnectionBase
 			final RoutingLostMessage lost = new RoutingLostMessage(data, offset);
 			fireLostMessage(new InetSocketAddress(src, port), lost);
 		}
+		else if (svc == KNXnetIPHeader.ROUTING_BUSY) {
+			final RoutingBusy busy = new RoutingBusy(data, offset);
+			fireRoutingBusy(new InetSocketAddress(src, port), busy);
+		}
 		else if (svc == GiraUnsupportedSvcType) {
 			if (!loggedGiraUnsupportedSvcType)
-				logger.warn("received unsupported Gira-specific service type 0x538, will be silently ignored: "
-						+ DataUnitBuilder.toHex(data, " "));
+				logger.warn("received unsupported Gira-specific service type 0x538, will be silently ignored: {}",
+						DataUnitBuilder.toHex(data, " "));
 			loggedGiraUnsupportedSvcType = true;
 		}
 		else if (svc != KNXnetIPHeader.SEARCH_REQ && svc != KNXnetIPHeader.SEARCH_RES)
@@ -369,6 +378,7 @@ public class KNXnetIPRouting extends ConnectionBase
 		return true;
 	}
 
+	@Override
 	protected void close(final int initiator, final String reason, final LogLevel level,
 		final Throwable t)
 	{
@@ -378,7 +388,7 @@ public class KNXnetIPRouting extends ConnectionBase
 			closing = 1;
 		}
 
-		logger.log(level, "close connection - " + reason, t);
+		LogService.log(logger, level, "close connection - " + reason, t);
 		try {
 			((MulticastSocket) socket).leaveGroup(multicast);
 		}
@@ -392,22 +402,50 @@ public class KNXnetIPRouting extends ConnectionBase
 		}
 	}
 
+	protected void send(final byte[] packet) throws KNXConnectionClosedException
+	{
+		final int state = getState();
+		if (state == CLOSED) {
+			logger.warn("send invoked on closed connection - aborted");
+			throw new KNXConnectionClosedException("connection closed");
+		}
+		if (state < 0) {
+			logger.error("send invoked in error state " + state + " - aborted");
+			throw new KNXIllegalStateException("in error state, send aborted");
+		}
+		try {
+			final DatagramPacket p = new DatagramPacket(packet, packet.length, dataEndpt.getAddress(),
+					dataEndpt.getPort());
+			socket.send(p);
+			setState(OK);
+		}
+		catch (final InterruptedIOException e) {
+			close(CloseEvent.USER_REQUEST, "interrupted", LogLevel.WARN, e);
+			Thread.currentThread().interrupt();
+			throw new KNXConnectionClosedException("interrupted connection got closed");
+		}
+		catch (final IOException e) {
+			close(CloseEvent.INTERNAL, "communication failure", LogLevel.ERROR, e);
+			throw new KNXConnectionClosedException("connection closed");
+		}
+	}
+
 	private void fireLostMessage(final InetSocketAddress sender, final RoutingLostMessage lost)
 	{
-		final LostMessageEvent e = new LostMessageEvent(this, sender,
-			lost.getDeviceState(), lost.getLostMessages());
-		final EventListener[] el = listeners.listeners();
-		for (int i = 0; i < el.length; i++) {
-			final EventListener l = el[i];
+		final LostMessageEvent e = new LostMessageEvent(this, sender, lost.getDeviceState(), lost.getLostMessages());
+		listeners.fire(l -> {
 			if (l instanceof RoutingListener)
-				try {
-					((RoutingListener) l).lostMessage(e);
-				}
-				catch (final RuntimeException rte) {
-					removeConnectionListener((KNXListener) l);
-					logger.error("removed event listener", rte);
-				}
-		}
+				((RoutingListener) l).lostMessage(e);
+		});
+	}
+
+	private void fireRoutingBusy(final InetSocketAddress sender, final RoutingBusy busy)
+	{
+		final RoutingBusyEvent e = new RoutingBusyEvent(this, sender, busy);
+		listeners.fire(l -> {
+			if (l instanceof RoutingListener)
+				((RoutingListener) l).routingBusy(e);
+		});
 	}
 
 	private boolean discardLoopbackFrame(final CEMI frame)
@@ -416,10 +454,10 @@ public class KNXnetIPRouting extends ConnectionBase
 			return false;
 		final byte[] a = frame.toByteArray();
 		synchronized (loopbackFrames) {
-			for (final Iterator i = loopbackFrames.iterator(); i.hasNext();) {
-				if (Arrays.equals(a, ((CEMILData) i.next()).toByteArray())) {
+			for (final Iterator<CEMILData> i = loopbackFrames.iterator(); i.hasNext();) {
+				if (Arrays.equals(a, i.next().toByteArray())) {
 					i.remove();
-					logger.trace("discard multicast loopback cEMI frame: " + frame);
+					logger.trace("discard multicast loopback cEMI frame: {}", frame);
 					return true;
 				}
 				// remove oldest entry if exceeding max. loopback queue size

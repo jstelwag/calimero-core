@@ -36,7 +36,7 @@
 
 package tuwien.auto.calimero.buffer.cache;
 
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 
 /**
  * Used to remove expired entries from a cache.
@@ -108,7 +108,6 @@ public final class CacheSweeper extends Thread
 
 	/**
 	 * Stops the sweeper and quits the thread.
-	 * <p>
 	 */
 	public void stopSweeper()
 	{
@@ -118,6 +117,7 @@ public final class CacheSweeper extends Thread
 	/* (non-Javadoc)
 	 * @see java.lang.Thread#run()
 	 */
+	@Override
 	public void run()
 	{
 		try {

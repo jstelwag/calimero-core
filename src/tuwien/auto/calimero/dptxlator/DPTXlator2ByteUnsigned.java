@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2015 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -39,7 +39,7 @@ package tuwien.auto.calimero.dptxlator;
 import java.util.HashMap;
 import java.util.Map;
 
-import tuwien.auto.calimero.exception.KNXFormatException;
+import tuwien.auto.calimero.KNXFormatException;
 
 /**
  * Translator for KNX DPTs with main number 7, type <b>2 byte unsigned value</b>.
@@ -133,13 +133,13 @@ public class DPTXlator2ByteUnsigned extends DPTXlator
 	public static final DPT DPT_BRIGHTNESS =
 		new DPT("7.013", "Brightness", "0", "65535", "lx");
 
-	private static final Map types;
+	private static final Map<String, DPT> types;
 
 	private final int min;
 	private final int max;
 
 	static {
-		types = new HashMap(15);
+		types = new HashMap<>(15);
 		types.put(DPT_VALUE_2_UCOUNT.getID(), DPT_VALUE_2_UCOUNT);
 		types.put(DPT_PROP_DATATYPE.getID(), DPT_PROP_DATATYPE);
 		types.put(DPT_TIMEPERIOD.getID(), DPT_TIMEPERIOD);
@@ -185,6 +185,7 @@ public class DPTXlator2ByteUnsigned extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getValue()
 	 */
+	@Override
 	public String getValue()
 	{
 		return makeString(0);
@@ -243,6 +244,7 @@ public class DPTXlator2ByteUnsigned extends DPTXlator
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getNumericValue()
 	 * @see #getValueUnsigned()
 	 */
+	@Override
 	public final double getNumericValue()
 	{
 		return getValueUnsigned();
@@ -251,6 +253,7 @@ public class DPTXlator2ByteUnsigned extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getAllValues()
 	 */
+	@Override
 	public String[] getAllValues()
 	{
 		final String[] s = new String[data.length / 2];
@@ -281,7 +284,8 @@ public class DPTXlator2ByteUnsigned extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getSubTypes()
 	 */
-	public final Map getSubTypes()
+	@Override
+	public final Map<String, DPT> getSubTypes()
 	{
 		return types;
 	}
@@ -290,7 +294,7 @@ public class DPTXlator2ByteUnsigned extends DPTXlator
 	 * @return the subtypes of the 2-byte unsigned translator type
 	 * @see DPTXlator#getSubTypesStatic()
 	 */
-	protected static Map getSubTypesStatic()
+	protected static Map<String, DPT> getSubTypesStatic()
 	{
 		return types;
 	}
@@ -310,6 +314,7 @@ public class DPTXlator2ByteUnsigned extends DPTXlator
 		return appendUnit(String.valueOf(fromDPT(index)));
 	}
 
+	@Override
 	protected void toDPT(final String value, final short[] dst, final int index)
 		throws KNXFormatException
 	{

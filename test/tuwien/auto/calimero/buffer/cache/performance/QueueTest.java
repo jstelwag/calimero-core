@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2016 B. Malinowsky
+    Copyright (c) 2006, 2011 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -50,9 +50,9 @@ public class QueueTest extends PerfTestCase
 	private final int iterations = 100000;
 	private final int capacity = 30;
 	private LongVector primitive;
-	private List list;
+	private List<Long> list;
 	private LongVector primitiveFilled;
-	private List listFilled;
+	private List<Long> listFilled;
 
 	private static final class LongVector
 	{
@@ -76,31 +76,31 @@ public class QueueTest extends PerfTestCase
 			arr[size++] = value;
 		}
 
-//		int capacity()
-//		{
-//			return arr.length;
-//		}
+		int capacity()
+		{
+			return arr.length;
+		}
 
-//		long get(final int index)
-//		{
-//			return arr[index];
-//		}
+		long get(final int index)
+		{
+			return arr[index];
+		}
 
 		void set(final int index, final long value)
 		{
 			arr[index] = value;
 		}
 
-//		int size()
-//		{
-//			return size;
-//		}
+		int size()
+		{
+			return size;
+		}
 
-//		void clear()
-//		{
-//			while (size > 0)
-//				arr[--size] = 0;
-//		}
+		void clear()
+		{
+			while (size > 0)
+				arr[--size] = 0;
+		}
 
 		long[] toArray()
 		{
@@ -121,15 +121,16 @@ public class QueueTest extends PerfTestCase
 	/* (non-Javadoc)
 	 * @see junit.framework.TestCase#setUp()
 	 */
+	@Override
 	protected void setUp() throws Exception
 	{
 		super.setUp();
 		setNormalize(iterations);
 		primitive = new LongVector(capacity);
-		list = new ArrayList(capacity);
+		list = new ArrayList<>(capacity);
 
 		primitiveFilled = new LongVector(capacity);
-		listFilled = new ArrayList(capacity);
+		listFilled = new ArrayList<>(capacity);
 		for (int i = 0; i < capacity; ++i) {
 			primitiveFilled.add(System.currentTimeMillis());
 			listFilled.add(new Long(System.currentTimeMillis()));
@@ -139,6 +140,7 @@ public class QueueTest extends PerfTestCase
 	/* (non-Javadoc)
 	 * @see junit.framework.TestCase#tearDown()
 	 */
+	@Override
 	protected void tearDown() throws Exception
 	{
 		printResults();

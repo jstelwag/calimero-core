@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2014 B. Malinowsky
+    Copyright (c) 2014, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -36,11 +36,14 @@
 
 package tuwien.auto.calimero.dptxlator;
 
+import org.junit.Ignore;
+
 import junit.framework.TestCase;
 
 /**
  * @author B. Malinowsky
  */
+@Ignore
 public class DPTXlatorRGBTest extends TestCase
 {
 	/**
@@ -54,17 +57,10 @@ public class DPTXlatorRGBTest extends TestCase
 	/* (non-Javadoc)
 	 * @see junit.framework.TestCase#setUp()
 	 */
+	@Override
 	protected void setUp() throws Exception
 	{
 		super.setUp();
-	}
-
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#tearDown()
-	 */
-	protected void tearDown() throws Exception
-	{
-		super.tearDown();
 	}
 
 	/**

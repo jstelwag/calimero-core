@@ -39,10 +39,9 @@ package tuwien.auto.calimero.dptxlator;
 import java.util.Calendar;
 
 import junit.framework.TestCase;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 import tuwien.auto.calimero.Util;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.log.LogManager;
 
 /**
  * @author B. Malinowsky
@@ -86,22 +85,13 @@ public class DPTXlatorDateTimeTest extends TestCase
 	/* (non-Javadoc)
 	 * @see junit.framework.TestCase#setUp()
 	 */
+	@Override
 	protected void setUp() throws Exception
 	{
 		super.setUp();
-		LogManager.getManager().addWriter("DPTXlator", Util.getLogWriter());
+		Util.setupLogging("DPTXlator");
 		t = new DPTXlatorDateTime(DPTXlatorDateTime.DPT_DATE_TIME.getID());
 		def = t.getValue();
-	}
-
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#tearDown()
-	 */
-	protected void tearDown() throws Exception
-	{
-		Thread.sleep(100);
-		LogManager.getManager().removeWriter("DPTXlator", Util.getLogWriter());
-		super.tearDown();
 	}
 
 	/**
@@ -215,7 +205,7 @@ public class DPTXlatorDateTimeTest extends TestCase
 		t.setValue(test);
 		final String std = t.getValue();
 		final byte[] d = t.getData(dst, offset);
-		assertEquals(dst, d);
+		assertSame(dst, d);
 		assertTrue(dst[0] == 0 && dst[1] == 0 && dst[10] == 0 && dst[11] == 0);
 		for (int i = 0; i < 8; ++i)
 			assertEquals(cmp[i], d[offset + i]);
@@ -490,7 +480,8 @@ public class DPTXlatorDateTimeTest extends TestCase
 		timeHelperThrow(0, 0, -55);
 	}
 
-	private void timeHelper(final int hr, final int min, final int sec, final int dataHr, final int dataMin, final int dataSec)
+	private void timeHelper(final int hr, final int min, final int sec, final int dataHr, final int dataMin,
+		final int dataSec)
 	{
 		t.setTime(hr, min, sec);
 		t.setValidField(DPTXlatorDateTime.TIME, true);

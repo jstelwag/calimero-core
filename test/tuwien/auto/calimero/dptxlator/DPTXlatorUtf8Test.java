@@ -42,10 +42,9 @@ import java.util.Arrays;
 import org.junit.Assert;
 
 import junit.framework.TestCase;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 import tuwien.auto.calimero.Util;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.log.LogManager;
 
 /**
  * @author B. Malinowsky
@@ -62,7 +61,7 @@ public class DPTXlatorUtf8Test extends TestCase
 	// ab[uppercase weird A]cd[lowercase greek a]
 	private final String nonLatin = "ab\u0100cd\u03b1";
 
-//	private final byte[] dataEmpty = new byte[1];
+	private final byte[] dataEmpty = new byte[1];
 	private final byte[] data1 = new byte[6];
 	private final byte[] data2 = new byte[6];
 
@@ -80,10 +79,11 @@ public class DPTXlatorUtf8Test extends TestCase
 	/* (non-Javadoc)
 	 * @see junit.framework.TestCase#setUp()
 	 */
+	@Override
 	protected void setUp() throws Exception
 	{
 		super.setUp();
-		LogManager.getManager().addWriter("DPTXlator", Util.getLogWriter());
+		Util.setupLogging("DPTXlator");
 		TranslatorTypes.createTranslator(TranslatorTypes.TYPE_UTF8, "28.001");
 		t = new DPTXlatorUtf8(DPTXlatorUtf8.DPT_UTF8);
 
@@ -115,14 +115,6 @@ public class DPTXlatorUtf8Test extends TestCase
 		for (int i = 0; i < nonLatinLength; ++i)
 			data[k++] = nonLatinBytes[i];
 		data[k++] = 0;
-	}
-
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#tearDown()
-	 */
-	protected void tearDown() throws Exception
-	{
-		super.tearDown();
 	}
 
 	/**

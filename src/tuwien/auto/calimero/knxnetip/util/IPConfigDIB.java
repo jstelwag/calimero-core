@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2015 B. Malinowsky
+    Copyright (c) 2015, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -41,8 +41,8 @@ import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 
 /**
  * Represents an IP configuration description information block. DIBs of this type are used for
@@ -167,6 +167,7 @@ public final class IPConfigDIB extends DIB
 	/* (non-Javadoc)
 	 * @see java.lang.Object#toString()
 	 */
+	@Override
 	public String toString()
 	{
 		try {
@@ -182,6 +183,7 @@ public final class IPConfigDIB extends DIB
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.knxnetip.util.DIB#toByteArray()
 	 */
+	@Override
 	public byte[] toByteArray()
 	{
 		final byte[] buf = super.toByteArray();
@@ -203,7 +205,8 @@ public final class IPConfigDIB extends DIB
 		try {
 			return (Inet4Address) InetAddress.getByAddress(addr);
 		}
-		catch (final UnknownHostException ignore) {}
-		return null;
+		catch (final UnknownHostException ignore) { 
+			throw new KNXIllegalArgumentException("illegal length of IPv4 address", ignore);
+		}
 	}
 }

@@ -39,6 +39,7 @@ package tuwien.auto.calimero.knxnetip;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.MulticastSocket;
@@ -49,15 +50,20 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
 
-import tuwien.auto.calimero.exception.KNXException;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.exception.KNXInvalidResponseException;
-import tuwien.auto.calimero.exception.KNXTimeoutException;
+import org.slf4j.Logger;
+
+import tuwien.auto.calimero.KNXException;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXInvalidResponseException;
+import tuwien.auto.calimero.KNXTimeoutException;
 import tuwien.auto.calimero.internal.UdpSocketLooper;
 import tuwien.auto.calimero.knxnetip.servicetype.DescriptionRequest;
 import tuwien.auto.calimero.knxnetip.servicetype.DescriptionResponse;
@@ -65,7 +71,6 @@ import tuwien.auto.calimero.knxnetip.servicetype.KNXnetIPHeader;
 import tuwien.auto.calimero.knxnetip.servicetype.PacketHelper;
 import tuwien.auto.calimero.knxnetip.servicetype.SearchRequest;
 import tuwien.auto.calimero.knxnetip.servicetype.SearchResponse;
-import tuwien.auto.calimero.log.LogManager;
 import tuwien.auto.calimero.log.LogService;
 
 /**
@@ -102,7 +107,6 @@ public class Discoverer
 {
 	/**
 	 * Name of the log service used by a discoverer.
-	 * <p>
 	 */
 	public static final String LOG_SERVICE = "calimero.knxnetip.Discoverer";
 
@@ -116,8 +120,7 @@ public class Discoverer
 	 */
 	public static final int SEARCH_PORT = KNXnetIPConnection.DEFAULT_PORT;
 
-	private static final LogService logger = LogManager.getManager().getLogService(LOG_SERVICE);
-
+	private static final Logger logger = LogService.getLogger(LOG_SERVICE);
 	static final InetAddress SYSTEM_SETUP_MULTICAST;
 	static {
 		InetAddress a = null;
@@ -125,7 +128,7 @@ public class Discoverer
 			a = InetAddress.getByName(SEARCH_MULTICAST);
 		}
 		catch (final UnknownHostException e) {
-			logger.fatal("on resolving system setup multicast " + SEARCH_MULTICAST, e);
+			logger.error("on resolving system setup multicast " + SEARCH_MULTICAST, e);
 		}
 		SYSTEM_SETUP_MULTICAST = a;
 	}
@@ -138,14 +141,14 @@ public class Discoverer
 		if (os.indexOf("windows") >= 0) {
 			// minor: 0 = vista, 1 = win 7, 2 = win 8, 3 = win 8.1, 4 = win 10,  ...
 			final String ver = System.getProperty("os.version", "generic");
-			win7_OrLater = Double.parseDouble(ver) >= 6.1;
+			win7_OrLater = Double.parseDouble(ver) > 6.1;
 		}
 		if (os.indexOf("mac os x") >= 0)
 			osx = true;
 	}
 
 	// local host/port
-	private final InetAddress host;
+	private InetAddress host;
 	private final int port;
 	// is our discovery/description aware of network address translation
 	private final boolean nat;
@@ -154,8 +157,73 @@ public class Discoverer
 	// see also RFC 5135
 	private final boolean mcast;
 
-	private final List receivers = Collections.synchronizedList(new ArrayList());
-	private final List responses = Collections.synchronizedList(new ArrayList());
+	private final List<ReceiverLoop> receivers = Collections.synchronizedList(new ArrayList<>());
+	private final List<Result<SearchResponse>> responses = Collections
+			.synchronizedList(new ArrayList<>());
+
+
+	/**
+	 * Discoverer result, either containing a {@link SearchResponse} or {@link DescriptionResponse}.
+	 *
+	 */
+	public static final class Result<T>
+	{
+		private final T response;
+		private final NetworkInterface ni;
+		private final InetAddress addr;
+
+		Result(final T r, final NetworkInterface outgoing, final InetAddress bind)
+		{
+			response = r;
+			ni = outgoing;
+			addr = bind;
+		}
+
+		/**
+		 * @return the received discoverer response
+		 */
+		public T getResponse()
+		{
+			return response;
+		}
+
+		/**
+		 * @return the local network interface used for the discovery or description request
+		 */
+		public NetworkInterface getNetworkInterface()
+		{
+			return ni;
+		}
+
+		/**
+		 * @return the local IP address used for the discovery or description request
+		 */
+		public InetAddress getAddress()
+		{
+			return addr;
+		}
+
+		@Override
+		public boolean equals(final Object obj)
+		{
+			if (this == obj)
+				return true;
+			if (!(obj instanceof Result<?>))
+				return false;
+			final Result<?> other = (Result<?>) obj;
+			return getNetworkInterface().equals(other.getNetworkInterface())
+					&& getAddress().equals(other.getAddress())
+					&& getResponse().equals(other.getResponse());
+		}
+
+		@Override
+		public int hashCode()
+		{
+			final int prime = 17;
+			return prime * (prime * getNetworkInterface().hashCode() + getAddress().hashCode())
+					+ getResponse().hashCode();
+		}
+	}
 
 	/**
 	 * Creates a new Discoverer.
@@ -193,8 +261,8 @@ public class Discoverer
 	 * situations. So it can be overruled specifying a local host address using this
 	 * constructor.
 	 *
-	 * @param localHost local host address used for discovery/description responses, or
-	 *        <code>null</code> for the default local host
+	 * @param localHost local host address used for KNXnet/IP description, or
+	 *        <code>null</code> to use the default local host if required
 	 * @param localPort the port number used to bind a socket, a valid port is in the
 	 *        range of 1 to 65535, or use 0 to pick an arbitrary unused (ephemeral) port.
 	 *        Note that a specified valid port does not ensure a successful bind in
@@ -211,20 +279,13 @@ public class Discoverer
 	{
 		if (localPort < 0 || localPort > 0xFFFF)
 			throw new KNXIllegalArgumentException("port out of range [0..0xFFFF]");
-		if (localHost == null)
-			try {
-				host = InetAddress.getLocalHost();
-			}
-			catch (final UnknownHostException e) {
-				logger.error("can not get local host", e);
-				throw new KNXException("can not get local host");
-			}
-		else
-			host = localHost;
+		host = localHost;
 		port = localPort;
 		nat = natAware;
 		mcast = mcastResponse;
-		checkHost();
+
+		if (host != null && host.getAddress().length != 4 && !nat)
+			throw new KNXException("IPv4 address required if NAT is not used (supplied " + host.getHostAddress() + ")");
 	}
 
 	/**
@@ -243,7 +304,7 @@ public class Discoverer
 	 * @param ni the {@link NetworkInterface} used for sending outgoing multicast
 	 *        messages, or <code>null</code> to use the default multicast interface
 	 * @param timeout time window in seconds during which search response messages will
-	 *        get collected, timeout >= 0. If timeout is zero, no timeout is set, the
+	 *        get collected, timeout &ge; 0. If timeout is zero, no timeout is set, the
 	 *        search has to be stopped with {@link #stopSearch()}.
 	 * @param wait <code>true</code> to block until end of search before return
 	 * @throws KNXException on network I/O error
@@ -275,7 +336,7 @@ public class Discoverer
 	 * @param ni the {@link NetworkInterface} used for sending outgoing multicast
 	 *        messages, or <code>null</code> to use the default multicast interface
 	 * @param timeout time window in seconds during which search response messages will
-	 *        get collected, <code>timeout >= 0</code>. If timeout is zero, no timeout is
+	 *        get collected, <code>timeout &ge; 0</code>. If timeout is zero, no timeout is
 	 *        set, the search has to be stopped with {@link #stopSearch()}.
 	 * @param wait <code>true</code> to block until end of search before return
 	 * @throws KNXException on network I/O error
@@ -292,7 +353,14 @@ public class Discoverer
 			throw new KNXIllegalArgumentException("timeout has to be >= 0");
 		if (localPort < 0 || localPort > 65535)
 			throw new KNXIllegalArgumentException("port out of range [0..0xFFFF]");
-		final ReceiverLoop r = search(host, localPort, ni, timeout);
+
+		// possibly empty list of netif IP addresses
+		final List<InetAddress> l = Optional.ofNullable(ni).map(NetworkInterface::getInetAddresses)
+				.map(Collections::list).orElse(new ArrayList<>());
+		// use any assigned (IPv4) address of netif, otherwise, use host
+		final InetAddress addr = l.stream().filter(ia -> nat || ia instanceof Inet4Address).findFirst().orElse(host());
+
+		final ReceiverLoop r = search(addr, localPort, ni, timeout);
 		if (wait) {
 			try {
 				join(r);
@@ -317,7 +385,7 @@ public class Discoverer
 	 * invoked.
 	 *
 	 * @param timeout time window in seconds during which search response messages will
-	 *        get collected, timeout >= 0. If timeout is 0, no timeout is set, the search
+	 *        get collected, timeout &ge; 0. If timeout is 0, no timeout is set, the search
 	 *        has to be stopped with <code>stopSearch</code>.
 	 * @param wait <code>true</code> to block until end of search before return
 	 * @throws KNXException on network I/O error
@@ -330,7 +398,7 @@ public class Discoverer
 	{
 		if (timeout < 0)
 			throw new KNXIllegalArgumentException("timeout has to be >= 0");
-		final Enumeration eni;
+		final Enumeration<NetworkInterface> eni;
 		try {
 			eni = NetworkInterface.getNetworkInterfaces();
 		}
@@ -342,35 +410,43 @@ public class Discoverer
 			logger.error("no network interfaces found");
 			throw new KNXException("no network interfaces found");
 		}
-		final List rcv = new ArrayList();
+		final List<ReceiverLoop> rcv = new ArrayList<>();
 		// loopback flag, so we start at most one local search
 		boolean lo = false;
 		while (eni.hasMoreElements()) {
-			final NetworkInterface ni = (NetworkInterface) eni.nextElement();
+			final NetworkInterface ni = eni.nextElement();
 			// find one IP address we can use for our search on this interface
-			for (final Enumeration ea = ni.getInetAddresses(); ea.hasMoreElements();) {
-				final InetAddress a = (InetAddress) ea.nextElement();
+			for (final Enumeration<InetAddress> ea = ni.getInetAddresses(); ea.hasMoreElements();) {
+				final InetAddress a = ea.nextElement();
 				// without NAT, we only try IPv4 addresses
 				if (!nat && a.getAddress().length != 4)
-					logger.info("skipped " + a + ", not an IPv4 address");
+					logger.debug("skip " + a + ", not an IPv4 address");
 				else
 					try {
-						if (!(lo && a.isLoopbackAddress()))
-							rcv.add(search(a, port, ni, timeout));
-						if (a.isLoopbackAddress())
+						final boolean skipLinkLocal = false;
+						if (!(lo && a.isLoopbackAddress())) {
+							if (!(a.isLinkLocalAddress() && skipLinkLocal))
+								rcv.add(search(a, port, ni, timeout));
+						}
+						if (a.isLoopbackAddress()) {
 							lo = true;
-						else
-							break;
+						}
 					}
-					catch (final KNXException ignore) {}
+					catch (KNXException | RuntimeException e) {
+						// we continue on exception, but print a warning for user information
+						String causeMsg = "";
+						for (Throwable t = e.getCause(); t != null && t != t.getCause(); t = t.getCause())
+							causeMsg = " (" + t.getMessage() + ")";
+						logger.warn("using {} at {}: {}{}", a, ni.getName(), e.getMessage(), causeMsg);
+					}
 			}
 		}
 		if (rcv.size() == 0)
 			throw new KNXException("search could not be started on any network interface");
 		if (wait)
 			try {
-				for (final Iterator i = rcv.iterator(); i.hasNext();)
-					join((ReceiverLoop) i.next());
+				for (final Iterator<ReceiverLoop> i = rcv.iterator(); i.hasNext();)
+					join(i.next());
 			}
 			finally {
 				stopSearch();
@@ -384,7 +460,7 @@ public class Discoverer
 	 */
 	public final void stopSearch()
 	{
-		final ReceiverLoop[] loopers = (ReceiverLoop[]) receivers
+		final ReceiverLoop[] loopers = receivers
 				.toArray(new ReceiverLoop[receivers.size()]);
 		for (int i = 0; i < loopers.length; i++) {
 			final ReceiverLoop loop = loopers[i];
@@ -410,17 +486,38 @@ public class Discoverer
 	 * As long as searches are running, new responses might be added to the list of
 	 * responses.
 	 *
-	 * @return array of {@link SearchResponse}s
+	 * @return list of results with {@link SearchResponse}s
 	 * @see #stopSearch()
 	 */
-	public final SearchResponse[] getSearchResponses()
+	public final List<Result<SearchResponse>> getSearchResponses()
 	{
-		return (SearchResponse[]) responses.toArray(new SearchResponse[responses.size()]);
+		return Collections.unmodifiableList(responses);
+	}
+
+	/**
+	 * Returns all search responses received by ongoing searches so far, mapped to the local
+	 * network interface the response was received on.
+	 * <p>
+	 * The map contains a key for every network interface a search was started on. As long as a
+	 * search is executing, new responses might be added to the map's value. If there is no
+	 * reachable or responding KNXnet/IP router on a particular network interface, the corresponding
+	 * value (of type <code>List&lt;SearchResponse&gt;</code>) will be an empty list.
+	 *
+	 * @return map of {@link NetworkInterface}s, with the value holding the received search
+	 *         responses
+	 * @see #stopSearch()
+	 */
+	final Map<NetworkInterface, List<Result<SearchResponse>>> getSearchResponsesByInterface()
+	{
+		final Map<NetworkInterface, List<Result<SearchResponse>>> map = new HashMap<>();
+		responses.forEach(r -> map.putIfAbsent(r.getNetworkInterface(),
+				new ArrayList<Discoverer.Result<SearchResponse>>()));
+		responses.forEach(r -> map.get(r.getNetworkInterface()).add(r));
+		return map;
 	}
 
 	/**
 	 * Removes all search responses collected so far.
-	 * <p>
 	 */
 	public final void clearSearchResponses()
 	{
@@ -430,40 +527,38 @@ public class Discoverer
 	/**
 	 * Sends a description request to <code>server</code> and waits at most
 	 * <code>timeout</code> seconds for the answer message to arrive.
-	 * <p>
 	 *
 	 * @param server the socket address of the server the description is requested from
 	 * @param timeout time window in seconds to wait for answer message, 0 &lt; timeout
 	 *        &lt; ({@link Integer#MAX_VALUE} / 1000)
-	 * @return the description response message
+	 * @return the result containing the description response message
 	 * @throws KNXException on network I/O error
 	 * @throws KNXTimeoutException if the timeout was reached before the description
 	 *         response arrived
 	 * @throws KNXInvalidResponseException if a received message from <code>server</code>
 	 *         does not match the expected response
 	 */
-	public DescriptionResponse getDescription(final InetSocketAddress server, final int timeout)
-		throws KNXException
+	public Result<DescriptionResponse> getDescription(final InetSocketAddress server,
+		final int timeout) throws KNXException
 	{
 		if (timeout <= 0 || timeout >= Integer.MAX_VALUE / 1000)
 			throw new KNXIllegalArgumentException("timeout out of range");
-		final DatagramSocket s = createSocket(true, host, port, null, false);
+		final DatagramSocket s = createSocket(true, host(), port, null, false);
 		try {
 			final byte[] buf = PacketHelper.toPacket(new DescriptionRequest(nat ? null
 					: (InetSocketAddress) s.getLocalSocketAddress()));
 			s.send(new DatagramPacket(buf, buf.length, server));
-			final ReceiverLoop looper = new ReceiverLoop(s, 256, timeout * 1000,
-				server);
+			final ReceiverLoop looper = new ReceiverLoop(s, 256, timeout * 1000, server);
 			looper.loop();
 			if (looper.thrown != null)
 				throw looper.thrown;
 			if (looper.res != null)
-				return looper.res;
+				return new Result<>(looper.res, NetworkInterface.getByInetAddress(host()), host());
 		}
 		catch (final IOException e) {
 			final String msg = "network failure on getting description";
 			logger.error(msg, e);
-			throw new KNXException(msg);
+			throw new KNXException(msg, e);
 		}
 		finally {
 			s.close();
@@ -475,13 +570,12 @@ public class Discoverer
 
 	/**
 	 * Starts a search sending a search request message.
-	 * <p>
 	 *
 	 * @param localAddr local address to send search request from
 	 * @param localPort local port to send search request from
 	 * @param ni {@link NetworkInterface} used to send outgoing multicast, or
 	 *        <code>null</code> to use the default multicast interface
-	 * @param timeout timeout in seconds, timeout >= 0, 0 for an infinite time window
+	 * @param timeout timeout in seconds, timeout &ge; 0, 0 for an infinite time window
 	 * @return the receiver thread for the search started
 	 * @throws KNXException
 	 */
@@ -510,14 +604,12 @@ public class Discoverer
 
 			// IP multicast responses MUST be forwarded by NAT without
 			// modifications to IP/port, hence, we can safely state them in our HPAI
-			final InetSocketAddress res = mcast ? new InetSocketAddress(SYSTEM_SETUP_MULTICAST,
-					s.getLocalPort()) : nat ? null : new InetSocketAddress(localAddr,
-					s.getLocalPort());
+			final InetSocketAddress res = mcast ? new InetSocketAddress(SYSTEM_SETUP_MULTICAST, s.getLocalPort())
+					: nat ? null : new InetSocketAddress(localAddr, s.getLocalPort());
 			final byte[] buf = PacketHelper.toPacket(new SearchRequest(res));
 			s.send(new DatagramPacket(buf, buf.length, SYSTEM_SETUP_MULTICAST, SEARCH_PORT));
 			synchronized (receivers) {
-				final ReceiverLoop l = startReceiver(s, timeout,
-						nifName + localAddr.getHostAddress());
+				final ReceiverLoop l = startReceiver(s, localAddr, timeout, nifName + localAddr.getHostAddress());
 				receivers.add(l);
 				return l;
 			}
@@ -529,8 +621,8 @@ public class Discoverer
 				}
 				catch (final IOException ignore) {}
 			s.close();
-			logger.warn("failure sending search request on " + localAddr + ":" + localPort, e);
-			throw new KNXException("search request failed, " + e.getMessage());
+			throw new KNXException("search request to " + SYSTEM_SETUP_MULTICAST + " failed on "
+					+ localAddr + ":" + localPort, e);
 		}
 	}
 
@@ -559,15 +651,14 @@ public class Discoverer
 			catch (final IOException e) {
 				if (!win7_OrLater)
 					throw e;
-				logger.warn("setting outgoing network interface " + ni.getName()
-						+ " failed, using system default."
+				logger.warn("setting outgoing network interface " + ni.getName() + " failed, using system default."
 						+ " Either disable IPv6 or set java.net.preferIPv4Stack=true.");
 			}
 		}
 		catch (final IOException e) {
 			final String msg = "failed to create socket on " + bindAddr + ":" + bindPort;
 			logger.warn(msg, e);
-			throw new KNXException(msg + ", " + e.getMessage());
+			throw new KNXException(msg, e);
 		}
 		if (mcastResponse) {
 			try {
@@ -582,9 +673,8 @@ public class Discoverer
 			}
 			catch (final IOException e) {
 				s.close();
-				final String msg = "joining group " + SYSTEM_SETUP_MULTICAST + " failed";
-				logger.error(msg, e);
-				throw new KNXException(msg + ", " + e.getMessage());
+				throw new KNXException("failed to join multicast group " + SYSTEM_SETUP_MULTICAST
+						+ (ni == null ? "" : " at " + ni.getName()), e);
 			}
 			catch (final InterruptedException e) {
 				Thread.currentThread().interrupt();
@@ -599,20 +689,23 @@ public class Discoverer
 			l.t.join();
 	}
 
-	private void checkHost() throws KNXException
+	private synchronized InetAddress host() throws KNXException
 	{
-		if (nat || host.getAddress().length == 4)
-			return;
-		final KNXException e = new KNXException(host.getHostAddress() + " is not an IPv4 address");
-		logger.error("NAT not used, only IPv4 address support", e);
-		throw e;
+		try {
+			if (host == null)
+				host = InetAddress.getLocalHost();
+			return host;
+		}
+		catch (final UnknownHostException e) {
+			throw new KNXException("on resolving address of local host", e);
+		}
 	}
 
-	private ReceiverLoop startReceiver(final MulticastSocket socket, final int timeout,
-		final String name)
+	private ReceiverLoop startReceiver(final MulticastSocket socket, final InetAddress addrOnNetIf,
+		final int timeout, final String name)
 	{
-		final ReceiverLoop looper = new ReceiverLoop(socket, 256, timeout * 1000, name + ":"
-				+ socket.getLocalPort());
+		final ReceiverLoop looper = new ReceiverLoop(socket, addrOnNetIf, 256, timeout * 1000, name
+				+ ":" + socket.getLocalPort());
 		looper.t = new Thread(looper, "Discoverer " + name);
 		looper.t.setDaemon(true);
 		looper.t.start();
@@ -623,8 +716,13 @@ public class Discoverer
 	{
 		private final boolean search;
 		private final InetSocketAddress server;
+		private NetworkInterface nif;
+
 		// used for search looper
 		private Thread t;
+		// we want this address to return it in a search result even if the socket was not bound
+		private final InetAddress addrOnNetif;
+
 		// used for description looper
 		private DescriptionResponse res;
 		private KNXInvalidResponseException thrown;
@@ -632,10 +730,17 @@ public class Discoverer
 
 		// use for search looper
 		// timeout in milliseconds
-		ReceiverLoop(final DatagramSocket socket, final int receiveBufferSize,
-			final int timeout, final String name)
+		ReceiverLoop(final MulticastSocket socket, final InetAddress addrOnNetIf,
+			final int receiveBufferSize, final int timeout, final String name)
 		{
 			super(socket, true, receiveBufferSize, 0, timeout);
+			try {
+				nif = socket.getNetworkInterface();
+			}
+			catch (final SocketException e) {
+				throw new KNXIllegalArgumentException("getting network interface of socket " + socket, e);
+			}
+			this.addrOnNetif = addrOnNetIf;
 			search = true;
 			server = null;
 			id = name;
@@ -647,11 +752,13 @@ public class Discoverer
 			final InetSocketAddress queriedServer)
 		{
 			super(socket, true, receiveBufferSize, 0, timeout);
+			addrOnNetif = null;
 			search = false;
 			server = queriedServer;
 			id = "" + socket.getLocalSocketAddress();
 		}
 
+		@Override
 		public void run()
 		{
 			logger.trace("started on " + id);
@@ -664,12 +771,12 @@ public class Discoverer
 			logger.trace("stopped on " + id);
 		}
 
+		@Override
 		public void quit()
 		{
 			if (search) {
 				try {
-					((MulticastSocket) s).leaveGroup(new InetSocketAddress(SYSTEM_SETUP_MULTICAST,
-							0), null);
+					((MulticastSocket) s).leaveGroup(new InetSocketAddress(SYSTEM_SETUP_MULTICAST, 0), null);
 				}
 				catch (final IOException ignore) {}
 				receivers.remove(this);
@@ -677,19 +784,22 @@ public class Discoverer
 			super.quit();
 		}
 
-		public void onReceive(final InetSocketAddress source, final byte[] data, final int offset,
-			final int length)
+		@Override
+		public void onReceive(final InetSocketAddress source, final byte[] data, final int offset, final int length)
 		{
 			try {
 				final KNXnetIPHeader h = new KNXnetIPHeader(data, offset);
 				if (h.getTotalLength() > length)
-					logger.warn("ignore received packet from " + source
-						+ ", frame length does not match");
+					logger.warn("ignore received packet from " + source + ", frame length does not match");
 				else if (search && h.getServiceType() == KNXnetIPHeader.SEARCH_RES) {
-					// if our search is still running, add response
+					// if our search is still running, add response if not already added
 					synchronized (receivers) {
-						if (receivers.contains(this))
-							responses.add(new SearchResponse(data, offset + h.getStructLength()));
+						if (receivers.contains(this)) {
+							final Result<SearchResponse> r = new Result<>(
+									new SearchResponse(data, offset + h.getStructLength()), nif, addrOnNetif);
+							if (!responses.contains(r))
+								responses.add(r);
+						}
 					}
 				}
 				else if (!search && h.getServiceType() == KNXnetIPHeader.DESCRIPTION_RES) {
@@ -699,7 +809,7 @@ public class Discoverer
 						}
 						catch (final KNXFormatException e) {
 							logger.error("invalid description response", e);
-							thrown = new KNXInvalidResponseException(e.getMessage());
+							thrown = new KNXInvalidResponseException("description response from " + source, e);
 						}
 						finally {
 							quit();

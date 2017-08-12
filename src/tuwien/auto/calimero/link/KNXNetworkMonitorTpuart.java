@@ -39,7 +39,7 @@ package tuwien.auto.calimero.link;
 import java.io.IOException;
 import java.util.Collections;
 
-import tuwien.auto.calimero.exception.KNXException;
+import tuwien.auto.calimero.KNXException;
 import tuwien.auto.calimero.link.medium.KNXMediumSettings;
 import tuwien.auto.calimero.link.medium.TPSettings;
 import tuwien.auto.calimero.serial.TpuartConnection;
@@ -83,11 +83,6 @@ public class KNXNetworkMonitorTpuart extends AbstractMonitor
 		setDecodeRawFrames(decodeRawFrames);
 		conn.addConnectionListener(notifier);
 	}
-
-	protected void onClose()
-	{
-		conn.close();
-	};
 
 	private void enterBusmonitor() throws KNXLinkClosedException
 	{

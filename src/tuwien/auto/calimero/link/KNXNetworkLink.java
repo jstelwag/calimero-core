@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2011 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -37,36 +37,34 @@
 package tuwien.auto.calimero.link;
 
 import tuwien.auto.calimero.KNXAddress;
+import tuwien.auto.calimero.KNXTimeoutException;
 import tuwien.auto.calimero.Priority;
 import tuwien.auto.calimero.cemi.CEMILData;
-import tuwien.auto.calimero.exception.KNXTimeoutException;
 import tuwien.auto.calimero.knxnetip.KNXnetIPConnection;
 import tuwien.auto.calimero.link.medium.KNXMediumSettings;
-import tuwien.auto.calimero.log.LogManager;
+import tuwien.auto.calimero.log.LogService;
 
 /**
  * KNX network link interface to communicate with destinations in a KNX network.
  * <p>
- * A network link enables transparency of the type of connection protocol used to access a
- * KNX network, as well as an abstraction of the particular physical KNX medium used for
- * communication in the KNX network (e.g. TP1).
+ * A network link provides transparency of the type of connection protocol used to access a KNX network, as well as an
+ * abstraction of the particular physical KNX transmission medium used for communication in the KNX network, e.g., TP1.
  * <p>
- * The link provides two forms of information exchange for KNX messages, one is to
- * directly supply necessary information like KNX address, message priority and NSDU, the
- * other to use cEMI as container format.<br>
- * On send, message parts not present or supplied which are necessary for communication
- * will be added using the information provided by
- * {@link KNXNetworkLink#setKNXMedium(KNXMediumSettings)}.
+ * The link provides two forms of information exchange for KNX messages: one is to directly supply necessary information
+ * like KNX address, message priority and NSDU, the other is to use cEMI as container format.<br>
+ * Before sending a message, message parts that are not present nor supplied, but which are necessary for communication,
+ * are added using the settings of {@link KNXMediumSettings}.
  * <p>
- * A KNX network link relies on an underlying intermediate connection technology and
- * protocol (e.g., IP and KNXnet/IP, {@link KNXnetIPConnection}) to access KNX networks,
- * the necessary access options are specified at creation of a dedicated network link.
+ * A KNX network link relies on an underlying intermediate connection technology and protocol, e.g., IP and KNXnet/IP
+ * {@link KNXnetIPConnection}, to access KNX networks. The necessary access settings are specified at creation of a
+ * dedicated network link.
  * <p>
  * The name returned by {@link #getName()} is used by a link as name of its log service.
- * 
+ *
  * @author B. Malinowsky
+ * @see Connector
  */
-public interface KNXNetworkLink
+public interface KNXNetworkLink extends AutoCloseable
 {
 	/**
 	 * Supplies medium information necessary for KNX communication.
@@ -77,7 +75,7 @@ public interface KNXNetworkLink
 	 * the link in the first place.<br>
 	 * The <code>settings</code> object is not copied internally to allow subsequent
 	 * changes to medium settings by the user which should take effect immediately.
-	 * 
+	 *
 	 * @param settings medium settings to use, the expected subtype is according to the
 	 *        KNX network medium
 	 */
@@ -87,7 +85,7 @@ public interface KNXNetworkLink
 	 * Returns the KNX medium settings used by this network link.
 	 * <p>
 	 * The returned object is a reference to the one used by this link (not a copy).
-	 * 
+	 *
 	 * @return medium settings for KNX network
 	 */
 	KNXMediumSettings getKNXMedium();
@@ -97,7 +95,7 @@ public interface KNXNetworkLink
 	 * link.
 	 * <p>
 	 * If <code>l</code> was already added as listener, no action is performed.
-	 * 
+	 *
 	 * @param l the listener to add
 	 */
 	void addLinkListener(NetworkLinkListener l);
@@ -107,7 +105,7 @@ public interface KNXNetworkLink
 	 * receive events from this link.
 	 * <p>
 	 * If <code>l</code> was not added in the first place, no action is performed.
-	 * 
+	 *
 	 * @param l the listener to remove
 	 */
 	void removeLinkListener(NetworkLinkListener l);
@@ -121,7 +119,7 @@ public interface KNXNetworkLink
 	 * count of 7 never gets decremented.<br>
 	 * By default, a hop count of 6 is specified.
 	 * <p>
-	 * 
+	 *
 	 * @param count hop count value, 0 &lt;= value &lt;= 7
 	 */
 	void setHopCount(int count);
@@ -129,7 +127,7 @@ public interface KNXNetworkLink
 	/**
 	 * Returns the hop count used as default for KNX messages.
 	 * <p>
-	 * 
+	 *
 	 * @return hop count as 3 Bit unsigned value with the range 0 to 7
 	 * @see #setHopCount(int)
 	 */
@@ -142,7 +140,7 @@ public interface KNXNetworkLink
 	 * broadcast. A network link implementation is allowed to interpret a <code>dst</code>
 	 * parameter of <code>null</code> as system broadcast, or otherwise uses its default
 	 * broadcast behavior.
-	 * 
+	 *
 	 * @param dst KNX destination address, or <code>null</code>
 	 * @param p priority this KNX message is assigned to
 	 * @param nsdu network layer service data unit
@@ -161,7 +159,7 @@ public interface KNXNetworkLink
 	 * broadcast. A network link implementation is allowed to interpret a <code>dst</code>
 	 * parameter of <code>null</code> as system broadcast, or otherwise uses its default
 	 * broadcast behavior.
-	 * 
+	 *
 	 * @param dst KNX destination address, or <code>null</code>
 	 * @param p priority this message is assigned to
 	 * @param nsdu network layer service data unit
@@ -177,7 +175,7 @@ public interface KNXNetworkLink
 	 * <p>
 	 * If the source address of <code>msg</code> is 0.0.0, the device address supplied
 	 * in the medium settings is used as message source address.
-	 * 
+	 *
 	 * @param msg cEMI L-data message to send
 	 * @param waitForCon <code>true</code> to wait for link layer confirmation response,
 	 *        <code>false</code> to not wait for the confirmation
@@ -194,12 +192,12 @@ public interface KNXNetworkLink
 	 * The name is unique for links with different remote endpoints, or different types of
 	 * communication links.<br>
 	 * The returned name is used by this link for the name of its log service. Supply
-	 * {@link #getName()} to {@link LogManager#getLogService(String)} to get the log
+	 * {@link #getName()} to {@link LogService#getLogger(String)} to get the log
 	 * service of this link.
 	 * <p>
 	 * By default, "link " + address/ID of the remote endpoint is returned (e.g., "link
 	 * 192.168.0.10:3671" for an IP link).<br>
-	 * 
+	 *
 	 * @return link name as string
 	 */
 	String getName();
@@ -209,7 +207,7 @@ public interface KNXNetworkLink
 	 * <p>
 	 * After a call to {@link #close()} or after the underlying protocol initiated the end
 	 * of the communication, this method always returns <code>false</code>.
-	 * 
+	 *
 	 * @return <code>true</code> if this network link is open, <code>false</code> on
 	 *         closed
 	 */
@@ -222,5 +220,6 @@ public interface KNXNetworkLink
 	 * If no communication access was established in the first place, no action is
 	 * performed.
 	 */
+	@Override
 	void close();
 }

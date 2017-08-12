@@ -38,9 +38,9 @@ package tuwien.auto.calimero.knxnetip.servicetype;
 
 import java.io.ByteArrayOutputStream;
 
+import tuwien.auto.calimero.KNXFormatException;
 import tuwien.auto.calimero.cemi.CEMI;
 import tuwien.auto.calimero.cemi.CEMIFactory;
-import tuwien.auto.calimero.exception.KNXFormatException;
 
 /**
  * Represents a routing indication for routing services.
@@ -98,6 +98,7 @@ public class RoutingIndication extends ServiceType
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.knxnetip.servicetype.ServiceType#getStructLength()
 	 */
+	@Override
 	int getStructLength()
 	{
 		return cemi.getStructLength();
@@ -107,6 +108,7 @@ public class RoutingIndication extends ServiceType
 	 * @see tuwien.auto.calimero.knxnetip.servicetype.ServiceType#toByteArray
 	 *      (java.io.ByteArrayOutputStream)
 	 */
+	@Override
 	byte[] toByteArray(final ByteArrayOutputStream os)
 	{
 		final byte[] buf = cemi.toByteArray();

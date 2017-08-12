@@ -45,9 +45,10 @@ import junit.framework.TestCase;
 import tuwien.auto.calimero.GroupAddress;
 import tuwien.auto.calimero.Util;
 import tuwien.auto.calimero.xml.KNXMLException;
-import tuwien.auto.calimero.xml.XMLFactory;
-import tuwien.auto.calimero.xml.XMLReader;
-import tuwien.auto.calimero.xml.XMLWriter;
+import tuwien.auto.calimero.xml.XmlInputFactory;
+import tuwien.auto.calimero.xml.XmlOutputFactory;
+import tuwien.auto.calimero.xml.XmlReader;
+import tuwien.auto.calimero.xml.XmlWriter;
 
 /**
  * @author B. Malinowsky
@@ -58,8 +59,8 @@ public class StateDPTest extends TestCase
 	private static final String filename = "stateDP.xml";
 	private static final String dpFile = Util.getTargetPath() + filename;
 
-	private List inv;
-	private List upd;
+	private List<GroupAddress> inv;
+	private List<GroupAddress> upd;
 
 	/**
 	 * @param name name of test case
@@ -72,14 +73,15 @@ public class StateDPTest extends TestCase
 	/* (non-Javadoc)
 	 * @see junit.framework.TestCase#setUp()
 	 */
+	@Override
 	protected void setUp() throws Exception
 	{
 		super.setUp();
-		inv = new ArrayList();
+		inv = new ArrayList<>();
 		inv.add(new GroupAddress(1, 1, 1));
 		inv.add(new GroupAddress(2, 2, 2));
 		inv.add(new GroupAddress(3, 3, 3));
-		upd = new ArrayList();
+		upd = new ArrayList<>();
 		upd.add(new GroupAddress(4, 4, 4));
 		upd.add(new GroupAddress(5, 5, 5));
 	}
@@ -87,6 +89,7 @@ public class StateDPTest extends TestCase
 	/* (non-Javadoc)
 	 * @see junit.framework.TestCase#tearDown()
 	 */
+	@Override
 	protected void tearDown() throws Exception
 	{
 		super.tearDown();
@@ -140,13 +143,13 @@ public class StateDPTest extends TestCase
 		assertEquals("test", dp.getName());
 		assertTrue(dp.isStateBased());
 
-		Collection c = dp.getAddresses(false);
+		Collection<GroupAddress> c = dp.getAddresses(false);
 		assertEquals(3, c.size());
 		assertTrue(c.contains(new GroupAddress(1, 1, 1)));
 		assertTrue(c.contains(new GroupAddress(2, 2, 2)));
 		assertTrue(c.contains(new GroupAddress(3, 3, 3)));
 		try {
-			c.add(new Object());
+			c.add(ga);
 			fail("collection should be unmodifiable");
 		}
 		catch (final UnsupportedOperationException e) {}
@@ -156,7 +159,7 @@ public class StateDPTest extends TestCase
 		assertTrue(c.contains(new GroupAddress(4, 4, 4)));
 		assertTrue(c.contains(new GroupAddress(5, 5, 5)));
 		try {
-			c.add(new Object());
+			c.add(ga);
 			fail("collection should be unmodifiable");
 		}
 		catch (final UnsupportedOperationException e) {}
@@ -164,18 +167,18 @@ public class StateDPTest extends TestCase
 
 	/**
 	 * Test method for {@link tuwien.auto.calimero.datapoint.StateDP#StateDP(
-	 * tuwien.auto.calimero.xml.XMLReader)}.
+	 * tuwien.auto.calimero.xml.XmlReader)}.
 	 *
 	 * @throws KNXMLException
 	 */
-	public final void testStateDPXMLReader() throws KNXMLException
+	public final void testStateDPXmlReader() throws KNXMLException
 	{
-		final XMLWriter w = XMLFactory.getInstance().createXMLWriter(dpFile);
+		final XmlWriter w = XmlOutputFactory.newInstance().createXMLWriter(dpFile);
 		StateDP dp = new StateDP(ga, "testSave2", inv, upd);
 		dp.setExpirationTimeout(15);
 		dp.save(w);
 		w.close();
-		final XMLReader r = XMLFactory.getInstance().createXMLReader(dpFile);
+		final XmlReader r = XmlInputFactory.newInstance().createXMLReader(dpFile);
 		dp = new StateDP(r);
 		r.close();
 		assertEquals(ga, dp.getMainAddress());
@@ -184,18 +187,18 @@ public class StateDPTest extends TestCase
 		assertEquals(0, dp.getMainNumber());
 		assertNull(dp.getDPT());
 		assertEquals(15, dp.getExpirationTimeout());
-		assertEquals(upd, new ArrayList(dp.getAddresses(true)));
-		assertEquals(inv, new ArrayList(dp.getAddresses(false)));
+		assertEquals(upd, new ArrayList<>(dp.getAddresses(true)));
+		assertEquals(inv, new ArrayList<>(dp.getAddresses(false)));
 	}
 
 	/**
-	 * Test method for {@link Datapoint#create(XMLReader)}.
+	 * Test method for {@link Datapoint#create(XmlReader)}.
 	 *
 	 * @throws KNXMLException
 	 */
 	public final void testCreate() throws KNXMLException
 	{
-		final XMLReader r = XMLFactory.getInstance().createXMLReader(dpFile);
+		final XmlReader r = XmlInputFactory.newInstance().createXMLReader(Util.getPath() + filename);
 		assertTrue(Datapoint.create(r) instanceof StateDP);
 		r.close();
 	}
@@ -219,33 +222,32 @@ public class StateDPTest extends TestCase
 	public final void testAdd()
 	{
 		final StateDP dp = new StateDP(ga, "name1", inv, upd);
-		for (final Iterator i = upd.iterator(); i.hasNext();) {
-			final GroupAddress a = (GroupAddress) i.next();
-			dp.add(a, true);
+		for (final Iterator<GroupAddress> i = upd.iterator(); i.hasNext();) {
+			final GroupAddress a = i.next();
+			dp.addUpdatingAddress(a);
 		}
 		assertEquals(upd.size(), dp.getAddresses(true).size());
-		for (final Iterator i = inv.iterator(); i.hasNext();) {
-			final GroupAddress a = (GroupAddress) i.next();
-			dp.add(a, false);
+		for (final Iterator<GroupAddress> i = inv.iterator(); i.hasNext();) {
+			final GroupAddress a = i.next();
+			dp.addInvalidatingAddress(a);
 		}
 		assertEquals(inv.size(), dp.getAddresses(false).size());
-		dp.add(new GroupAddress(5, 5, 5), false);
+		dp.addInvalidatingAddress(new GroupAddress(5, 5, 5));
 		assertEquals(inv.size() + 1, dp.getAddresses(false).size());
 		assertTrue(dp.isInvalidating(new GroupAddress(5, 5, 5)));
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.datapoint.StateDP#remove(
-	 * tuwien.auto.calimero.GroupAddress, boolean)}.
+	 * Test method for {@link tuwien.auto.calimero.datapoint.StateDP#removeAddress(tuwien.auto.calimero.GroupAddress)}.
 	 */
-	public final void testRemove()
+	public final void testRemoveAddress()
 	{
 		final StateDP dp = new StateDP(ga, "name1", inv, upd);
 		assertTrue(dp.isInvalidating(new GroupAddress(1, 1, 1)));
-		dp.remove(new GroupAddress(1, 1, 1), false);
+		dp.removeAddress(new GroupAddress(1, 1, 1));
 		assertFalse(dp.isInvalidating(new GroupAddress(1, 1, 1)));
 		assertTrue(dp.isUpdating(new GroupAddress(4, 4, 4)));
-		dp.remove(new GroupAddress(4, 4, 4), true);
+		dp.removeAddress(new GroupAddress(4, 4, 4));
 		assertFalse(dp.isUpdating(new GroupAddress(4, 4, 4)));
 	}
 
@@ -269,9 +271,9 @@ public class StateDPTest extends TestCase
 	public final void testIsInvalidating()
 	{
 		final StateDP dp = new StateDP(ga, "test");
-		dp.add(new GroupAddress(2, 2, 2), true);
+		dp.addUpdatingAddress(new GroupAddress(2, 2, 2));
 		assertFalse(dp.isInvalidating(new GroupAddress(2, 2, 2)));
-		dp.add(new GroupAddress(2, 2, 2), false);
+		dp.addInvalidatingAddress(new GroupAddress(2, 2, 2));
 		assertTrue(dp.isInvalidating(new GroupAddress(2, 2, 2)));
 	}
 
@@ -282,9 +284,9 @@ public class StateDPTest extends TestCase
 	public final void testIsUpdating()
 	{
 		final StateDP dp = new StateDP(ga, "test");
-		dp.add(new GroupAddress(2, 2, 2), true);
+		dp.addUpdatingAddress(new GroupAddress(2, 2, 2));
 		assertTrue(dp.isUpdating(new GroupAddress(2, 2, 2)));
-		dp.add(new GroupAddress(1, 1, 1), false);
+		dp.addInvalidatingAddress(new GroupAddress(1, 1, 1));
 		assertFalse(dp.isUpdating(new GroupAddress(1, 1, 1)));
 	}
 }

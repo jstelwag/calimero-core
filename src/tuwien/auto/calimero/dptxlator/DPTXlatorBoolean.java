@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2015 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -39,8 +39,8 @@ package tuwien.auto.calimero.dptxlator;
 import java.util.HashMap;
 import java.util.Map;
 
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 
 /**
  * Translator for KNX DPTs with main number 1, type <b>Boolean</b>.
@@ -177,10 +177,10 @@ public class DPTXlatorBoolean extends DPTXlator
 	 */
 	public static final DPT DPT_HEAT_COOL = new DPT("1.100", "Heat/Cool", "cooling", "heating");
 
-	private static final Map types;
+	private static final Map<String, DPT> types;
 
 	static {
-		types = new HashMap(30);
+		types = new HashMap<>(30);
 		types.put(DPT_SWITCH.getID(), DPT_SWITCH);
 		types.put(DPT_BOOL.getID(), DPT_BOOL);
 		types.put(DPT_ENABLE.getID(), DPT_ENABLE);
@@ -259,6 +259,7 @@ public class DPTXlatorBoolean extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getValue()
 	 */
+	@Override
 	public String getValue()
 	{
 		return fromDPT(0);
@@ -267,6 +268,7 @@ public class DPTXlatorBoolean extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getAllValues()
 	 */
+	@Override
 	public String[] getAllValues()
 	{
 		final String[] buf = new String[data.length];
@@ -282,6 +284,7 @@ public class DPTXlatorBoolean extends DPTXlator
 	 * @return 0 for boolean false and 1 for boolean true
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getNumericValue()
 	 */
+	@Override
 	public final double getNumericValue()
 	{
 		return getValueBoolean() ? 1 : 0;
@@ -290,6 +293,7 @@ public class DPTXlatorBoolean extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#setData(byte[], int)
 	 */
+	@Override
 	public void setData(final byte[] data, final int offset)
 	{
 		if (offset < 0 || offset > data.length)
@@ -306,6 +310,7 @@ public class DPTXlatorBoolean extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getData(byte[], int)
 	 */
+	@Override
 	public byte[] getData(final byte[] dst, final int offset)
 	{
 		final int end = Math.min(data.length, dst.length - offset);
@@ -320,7 +325,8 @@ public class DPTXlatorBoolean extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getSubTypes()
 	 */
-	public final Map getSubTypes()
+	@Override
+	public final Map<String, DPT> getSubTypes()
 	{
 		return types;
 	}
@@ -329,11 +335,12 @@ public class DPTXlatorBoolean extends DPTXlator
 	 * @return the subtypes of the boolean translator type
 	 * @see DPTXlator#getSubTypesStatic()
 	 */
-	protected static Map getSubTypesStatic()
+	protected static Map<String, DPT> getSubTypesStatic()
 	{
 		return types;
 	}
 
+	@Override
 	protected void toDPT(final String value, final short[] dst, final int index)
 		throws KNXFormatException
 	{

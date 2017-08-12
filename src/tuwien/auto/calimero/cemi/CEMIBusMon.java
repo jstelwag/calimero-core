@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2016 B. Malinowsky
+    Copyright (c) 2006, 2015 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -39,8 +39,8 @@ package tuwien.auto.calimero.cemi;
 import java.io.ByteArrayInputStream;
 
 import tuwien.auto.calimero.DataUnitBuilder;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 
 /**
  * A cEMI busmonitor indication message.
@@ -63,26 +63,22 @@ public class CEMIBusMon implements CEMI
 
 	/**
 	 * Message code for busmonitor indication, code = {@value #MC_BUSMON_IND}.
-	 * <p>
 	 */
 	public static final int MC_BUSMON_IND = 0x2B;
 
 	/**
 	 * Additional information type ID for status info, ID = {@value #TYPEID_STATUSINFO}.
-	 * <p>
 	 */
 	public static final int TYPEID_STATUSINFO = 0x03;
 
 	/**
 	 * Additional information type ID for timestamp, ID = {@value #TYPEID_TIMESTAMP}.
-	 * <p>
 	 */
 	public static final int TYPEID_TIMESTAMP = 0x04;
 
 	/**
 	 * Additional information type ID for extended timestamp, ID = {@value
 	 * #TYPEID_TIMESTAMP_EXT}.
-	 * <p>
 	 */
 	public static final int TYPEID_TIMESTAMP_EXT = 0x06;
 
@@ -94,7 +90,6 @@ public class CEMIBusMon implements CEMI
 
 	/**
 	 * Creates a new busmonitor message.
-	 * <p>
 	 *
 	 * @param status the status information field (busmonitor error flags) as specified by
 	 *        cEMI, located in the additional information type {@link #TYPEID_STATUSINFO},
@@ -116,9 +111,7 @@ public class CEMIBusMon implements CEMI
 	}
 
 	/**
-	 * Creates a new busmonitor message.
-	 * <p>
-	 * Allows to specify every status flag in detail.
+	 * Creates a new busmonitor message, allowing to specify every status flag in detail.
 	 *
 	 * @param frameError <code>true</code> if a frame error was detected in the message,
 	 *        <code>false</code> otherwise
@@ -159,7 +152,6 @@ public class CEMIBusMon implements CEMI
 
 	/**
 	 * Creates a new busmonitor message from a byte stream.
-	 * <p>
 	 *
 	 * @param data byte stream containing a cEMI busmonitor message
 	 * @param offset start offset of cEMI frame in <code>data</code>
@@ -205,7 +197,6 @@ public class CEMIBusMon implements CEMI
 	/**
 	 * Creates a new busmonitor message using the supplied overall status and timestamp
 	 * information, and the raw frame data.
-	 * <p>
 	 *
 	 * @param status the status information field (busmonitor error flags) as specified by
 	 *        cEMI, located in the additional information type {@link #TYPEID_STATUSINFO},
@@ -234,7 +225,7 @@ public class CEMIBusMon implements CEMI
 	 * <p>
 	 * In the status field of the additional information block, only the sequence number
 	 * can be chosen, all other status flags remain 0 (i.e., indicating no error, no frame
-	 * loss)
+	 * loss).
 	 *
 	 * @param seqNumber sequence number in the status field (bits 2..0), 0 &lt;=
 	 *        <code>seqNumber</code> &lt;= 7
@@ -256,9 +247,7 @@ public class CEMIBusMon implements CEMI
 		return new CEMIBusMon(seqNumber, timestamp, extTimestamp, rawFrame);
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.cemi.CEMI#getMessageCode()
-	 */
+	@Override
 	public final int getMessageCode()
 	{
 		return MC_BUSMON_IND;
@@ -271,9 +260,10 @@ public class CEMIBusMon implements CEMI
 	 *
 	 * @return a copy of the raw frame on medium as byte array
 	 */
+	@Override
 	public final byte[] getPayload()
 	{
-		return (byte[]) raw.clone();
+		return raw.clone();
 	}
 
 //	/**
@@ -339,7 +329,6 @@ public class CEMIBusMon implements CEMI
 
 	/**
 	 * Returns the sequence number set in the status information.
-	 * <p>
 	 *
 	 * @return sequence in the range [0..7]
 	 */
@@ -363,7 +352,6 @@ public class CEMIBusMon implements CEMI
 
 	/**
 	 * Returns the type of timestamp contained in the additional information.
-	 * <p>
 	 *
 	 * @return timestamp type ID
 	 */
@@ -372,17 +360,13 @@ public class CEMIBusMon implements CEMI
 		return tstampType;
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.cemi.CEMI#getStructLength()
-	 */
+	@Override
 	public final int getStructLength()
 	{
 		return 7 + (tstampType == TYPEID_TIMESTAMP ? 2 : 4) + raw.length;
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.cemi.CEMI#toByteArray()
-	 */
+	@Override
 	public byte[] toByteArray()
 	{
 		final byte stampLen = (byte) (tstampType == TYPEID_TIMESTAMP ? 2 : 4);
@@ -406,9 +390,7 @@ public class CEMIBusMon implements CEMI
 		return buf;
 	}
 
-	/* (non-Javadoc)
-	 * @see java.lang.Object#toString()
-	 */
+	@Override
 	public String toString()
 	{
 		final StringBuffer buf = new StringBuffer(30);
@@ -477,7 +459,7 @@ public class CEMIBusMon implements CEMI
 		final long max = extTimestamp ? 0xFFFFFFFFL : 0xFFFFL;
 		if (tstamp < 0 || tstamp > max)
 			throw new KNXIllegalArgumentException("timestamp out of range");
-		raw = (byte[]) rawFrame.clone();
+		raw = rawFrame.clone();
 		if (raw.length == 0 || raw.length > 23)
 			throw new KNXIllegalArgumentException("raw frame length out of range [1..23]");
 	}

@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2016 B. Malinowsky
+    Copyright (c) 2006, 2015 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -40,8 +40,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.StringTokenizer;
 
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 
 /**
  * Translator for KNX DPTs with main number 3, type <b>3 Bit controlled</b>.
@@ -82,8 +82,8 @@ public class DPTXlator3BitControlled extends DPTXlator
 		 * from the control DPT information and stepcode 7, to the upper value control DPT
 		 * and stepcode 7.
 		 *
-		 * @param typeID datapoint type identifier
-		 * @param description short textual description
+		 * @param typeID {@inheritDoc}
+		 * @param description {@inheritDoc}
 		 * @param control the DPT of the control information
 		 */
 		public DPT3BitControlled(final String typeID, final String description, final DPT control)
@@ -119,10 +119,10 @@ public class DPTXlator3BitControlled extends DPTXlator
 	public static final DPT DPT_CONTROL_BLINDS =
 		new DPT3BitControlled("3.008", "Blinds", DPTXlatorBoolean.DPT_UPDOWN);
 
-	private static final Map types;
+	private static final Map<String, DPT> types;
 
 	static {
-		types = new HashMap(3);
+		types = new HashMap<>(3);
 		types.put(DPT_CONTROL_DIMMING.getID(), DPT_CONTROL_DIMMING);
 		types.put(DPT_CONTROL_BLINDS.getID(), DPT_CONTROL_BLINDS);
 	}
@@ -205,6 +205,7 @@ public class DPTXlator3BitControlled extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getAllValues()
 	 */
+	@Override
 	public String[] getAllValues()
 	{
 		final String[] buf = new String[data.length];
@@ -313,6 +314,7 @@ public class DPTXlator3BitControlled extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#setData(byte[], int)
 	 */
+	@Override
 	public void setData(final byte[] data, final int offset)
 	{
 		if (offset < 0 || offset > data.length)
@@ -329,6 +331,7 @@ public class DPTXlator3BitControlled extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getData(byte[], int)
 	 */
+	@Override
 	public byte[] getData(final byte[] dst, final int offset)
 	{
 		final int end = Math.min(data.length, dst.length - offset);
@@ -340,7 +343,8 @@ public class DPTXlator3BitControlled extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getSubTypes()
 	 */
-	public final Map getSubTypes()
+	@Override
+	public final Map<String, DPT> getSubTypes()
 	{
 		return types;
 	}
@@ -349,7 +353,7 @@ public class DPTXlator3BitControlled extends DPTXlator
 	 * @return the subtypes of the 3 Bit controlled translator type
 	 * @see DPTXlator#getSubTypesStatic()
 	 */
-	protected static Map getSubTypesStatic()
+	protected static Map<String, DPT> getSubTypesStatic()
 	{
 		return types;
 	}
@@ -376,6 +380,7 @@ public class DPTXlator3BitControlled extends DPTXlator
 		return sb.append(steps).append(" steps").toString();
 	}
 
+	@Override
 	protected void toDPT(final String value, final short[] dst, final int index)
 		throws KNXFormatException
 	{

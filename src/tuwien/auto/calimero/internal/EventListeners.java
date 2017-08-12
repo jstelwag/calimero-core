@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2011 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -36,146 +36,102 @@
 
 package tuwien.auto.calimero.internal;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.EventListener;
-import java.util.Iterator;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
-import tuwien.auto.calimero.log.LogService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Container for keeping event listeners.
  * <p>
- * The assumption for implementation of this class is that iterating over event listeners
- * is the predominant operation, adding and removing listeners not.
- * 
+ * The assumption for implementation of this class is that iterating over event listeners is the predominant operation,
+ * adding and removing listeners not.
+ *
  * @author B. Malinowsky
  */
-public class EventListeners
+public class EventListeners<T>
 {
-	private final List listeners = new ArrayList();
-	private EventListener[] listenersCopy = new EventListener[0];
-	private final LogService logger;
+	private final CopyOnWriteArrayList<T> listeners = new CopyOnWriteArrayList<>();
+	private final Logger logger;
 
 	/**
 	 * Creates a new event listeners container object.
-	 * <p>
-	 */
-	public EventListeners()
-	{
-		this(null);
-	}
-
-	/**
-	 * Creates a new event listeners container object.
-	 * <p>
-	 * 
+	 *
 	 * @param logger optional logger for log output
 	 */
-	public EventListeners(final LogService logger)
+	public EventListeners(final Logger logger)
 	{
 		this.logger = logger;
 	}
 
 	/**
+	 * Creates a new event listeners container object.
+	 */
+	public EventListeners()
+	{
+		this.logger = LoggerFactory.getLogger("calimero");
+	}
+
+	/**
 	 * Adds the specified event listener <code>l</code> to this container.
 	 * <p>
-	 * If <code>l</code> is
-	 * <code>null<code> or was already added as listener, no action is performed.
-	 * 
+	 * If <code>l</code> was already added as listener, no action is performed.
+	 *
 	 * @param l the listener to add
 	 */
-	public void add(final EventListener l)
+	public void add(final T l)
 	{
-		if (l == null)
-			return;
-		synchronized (listeners) {
-			if (!listeners.contains(l)) {
-				listeners.add(l);
-				listenersCopy = (EventListener[]) listeners
-					.toArray(new EventListener[listeners.size()]);
-			}
-			else if (logger != null)
+		if (!listeners.addIfAbsent(l))
+			if (logger != null)
 				logger.warn("event listener already registered");
-		}
 	}
 
 	/**
 	 * Removes the specified event listener <code>l</code> from this container.
 	 * <p>
 	 * If <code>l</code> was not added in the first place, no action is performed.
-	 * 
+	 *
 	 * @param l the listener to remove
 	 */
-	public void remove(final EventListener l)
+	public void remove(final T l)
 	{
-		synchronized (listeners) {
-			if (listeners.remove(l))
-				listenersCopy = (EventListener[]) listeners
-					.toArray(new EventListener[listeners.size()]);
-		}
+		listeners.remove(l);
 	}
 
 	/**
 	 * Removes all event listeners from this container.
-	 * <p>
 	 */
 	public void removeAll()
 	{
-		synchronized (listeners) {
-			listeners.clear();
-			listenersCopy = new EventListener[0];
-		}
+		listeners.clear();
 	}
 
 	/**
-	 * Returns an array with all event listeners.
-	 * <p>
-	 * While modifying the returned array will have no impact on the event listeners kept
-	 * by this class, the array might be reused for subsequent callers, who will be
-	 * affected.
-	 * 
-	 * @return array with all event listeners in this container, with array size equal to
-	 *         the number of contained listeners
+	 * Returns a list of all event listeners. Trying to modify the returned list will have no impact on the event
+	 * listeners kept by this container. It might also fail if the returned list is unmodifiable.
+	 *
+	 * @return list of all event listeners in this container, with list size equal to the number of currently maintained
+	 *         listeners
 	 */
-	public EventListener[] listeners()
+	public List<T> listeners()
 	{
-		return listenersCopy;
+		return Collections.unmodifiableList(listeners);
 	}
 
-	/**
-	 * Returns an iterator for the contained event listeners.
-	 * <p>
-	 * 
-	 * @return the iterator for the listeners
-	 */
-	public Iterator iterator()
+	public void fire(final Consumer<? super T> c)
 	{
-		return Arrays.asList(listenersCopy).iterator();
-	}
-
-	// not for general use, quite slow due to reflection mechanism
-	/*
-	void fire(final Object event, final Method method)
-	{
-		final Object[] objs = new Object[] { event };
-		for (final Iterator i = iterator(); i.hasNext();) {
-			final EventListener l = (EventListener) i.next();
+		final List<T> list = listeners();
+		for (final T l : list) {
 			try {
-				method.invoke(l, objs);
+				c.accept(l);
 			}
 			catch (final RuntimeException rte) {
 				remove(l);
 				logger.error("removed event listener", rte);
 			}
-			catch (final IllegalAccessException e) {
-				e.printStackTrace();
-			}
-			catch (final InvocationTargetException e) {
-				e.printStackTrace();
-			}
 		}
 	}
-	*/
 }

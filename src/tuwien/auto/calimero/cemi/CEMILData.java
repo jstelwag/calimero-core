@@ -43,9 +43,9 @@ import tuwien.auto.calimero.DataUnitBuilder;
 import tuwien.auto.calimero.GroupAddress;
 import tuwien.auto.calimero.IndividualAddress;
 import tuwien.auto.calimero.KNXAddress;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 import tuwien.auto.calimero.Priority;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
 
 /**
  * A cEMI link layer data message (L-Data).
@@ -64,19 +64,16 @@ public class CEMILData implements CEMI
 
 	/**
 	 * Message code for L-Data request, code = {@value #MC_LDATA_REQ}.
-	 * <p>
 	 */
 	public static final int MC_LDATA_REQ = 0x11;
 
 	/**
 	 * Message code for L-Data confirmation, code = {@value #MC_LDATA_CON}.
-	 * <p>
 	 */
 	public static final int MC_LDATA_CON = 0x2E;
 
 	/**
 	 * Message code for L-Data indication, code = {@value #MC_LDATA_IND}.
-	 * <p>
 	 */
 	public static final int MC_LDATA_IND = 0x29;
 
@@ -84,7 +81,6 @@ public class CEMILData implements CEMI
 
 	/**
 	 * Message code of this message.
-	 * <p>
 	 */
 	protected int mc;
 
@@ -93,13 +89,11 @@ public class CEMILData implements CEMI
 
 	/**
 	 * Control field 1, the lower 8 bits contain control information.
-	 * <p>
 	 */
 	protected int ctrl1;
 
 	/**
 	 * Control field 2, the lower 8 bits contain control information.
-	 * <p>
 	 */
 	protected int ctrl2;
 
@@ -111,7 +105,6 @@ public class CEMILData implements CEMI
 
 	/**
 	 * Creates a new L-Data message from a byte stream.
-	 * <p>
 	 *
 	 * @param data byte stream containing a cEMI L-Data message
 	 * @param offset start offset of cEMI frame in <code>data</code>
@@ -198,7 +191,7 @@ public class CEMILData implements CEMI
 	 *        default repeat behavior;<br>
 	 *        meaning of default behavior on media:<br>
 	 *        <ul>
-	 *        <li>PL132, RF: no repetitions</li>
+	 *        <li>RF: no repetitions</li>
 	 *        <li>TP1, PL110: repetitions allowed</li>
 	 *        </ul>
 	 *        for indication message - <code>true</code> if is repeated frame,
@@ -210,7 +203,6 @@ public class CEMILData implements CEMI
 	 *        <code>false</code> for default behavior;<br>
 	 *        meaning of default behavior on media:<br>
 	 *        <ul>
-	 *        <li>PL132: no acknowledge requested</li>
 	 *        <li>TP1, PL110: acknowledge requested</li>
 	 *        </ul>
 	 * @param hopCount hop count starting value set in control field, in the range 0 &lt;=
@@ -222,8 +214,6 @@ public class CEMILData implements CEMI
 	{
 		// ctor used for these kinds with relevant ctrl flags:
 		// .ind on PL110: repeat broadcast priority hop count
-		// .ind on PL132: repeat broadcast priority ack hop count
-		// .req PL132: broadcast priority ack hop count
 		// .req on PL110: repeat broadcast priority hop count
 
 		if (msgCode != MC_LDATA_REQ && msgCode != MC_LDATA_CON && msgCode != MC_LDATA_IND)
@@ -239,7 +229,7 @@ public class CEMILData implements CEMI
 			ctrl2 |= 0x80;
 		if (!isValidTPDULength(tpdu))
 			throw new KNXIllegalArgumentException("maximum TPDU length is 16 in standard frame");
-		data = (byte[]) tpdu.clone();
+		data = tpdu.clone();
 		setPriority(p);
 		setRepeat(repeat);
 		setBroadcast(broadcast);
@@ -249,7 +239,6 @@ public class CEMILData implements CEMI
 
 	/**
 	 * Creates a L-Data message, mainly for TP1 media.
-	 * <p>
 	 *
 	 * @param msgCode a message code value specified in the L-Data type
 	 * @param src individual address of source
@@ -263,7 +252,7 @@ public class CEMILData implements CEMI
 	 *        default repeat behavior;<br>
 	 *        meaning of default behavior on media:<br>
 	 *        <ul>
-	 *        <li>PL132, RF: no repetitions</li>
+	 *        <li>RF: no repetitions</li>
 	 *        <li>TP1, PL110: repetitions allowed</li>
 	 *        </ul>
 	 *        for indication message - <code>true</code> if is repeated frame,
@@ -287,6 +276,7 @@ public class CEMILData implements CEMI
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.cemi.CEMI#getMessageCode()
 	 */
+	@Override
 	public final int getMessageCode()
 	{
 		return mc;
@@ -300,9 +290,10 @@ public class CEMILData implements CEMI
 	 *
 	 * @return a copy of the TPDU as byte array
 	 */
+	@Override
 	public final byte[] getPayload()
 	{
-		return (byte[]) data.clone();
+		return data.clone();
 	}
 
 	/**
@@ -373,13 +364,11 @@ public class CEMILData implements CEMI
 	 * for "don't care" (default medium behavior).<br>
 	 * Default behavior on media for L2 ack:
 	 * <ul>
-	 * <li>PL132: no acknowledge requested</li>
 	 * <li>TP1, PL110: acknowledge requested</li>
 	 * </ul>
 	 * <p>
 	 * For indication messages following media behavior applies:
 	 * <ul>
-	 * <li>PL132: value of ack is relayed from the bus</li>
 	 * <li>TP1, PL110: unused, undefined value behavior</li>
 	 * </ul>
 	 *
@@ -397,7 +386,6 @@ public class CEMILData implements CEMI
 	 * <code>true</code> for default repeat behavior.<br>
 	 * Meaning of default behavior on media:
 	 * <ul>
-	 * <li>PL132: no repetitions</li>
 	 * <li>TP1, PL110: repetitions allowed</li>
 	 * </ul>
 	 * <p>
@@ -438,6 +426,7 @@ public class CEMILData implements CEMI
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.cemi.CEMI#getStructLength()
 	 */
+	@Override
 	public int getStructLength()
 	{
 		return BASIC_LENGTH + data.length;
@@ -446,6 +435,7 @@ public class CEMILData implements CEMI
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.cemi.CEMI#toByteArray()
 	 */
+	@Override
 	public byte[] toByteArray()
 	{
 		final ByteArrayOutputStream os = new ByteArrayOutputStream();
@@ -462,17 +452,15 @@ public class CEMILData implements CEMI
 		return os.toByteArray();
 	}
 
-	/* (non-Javadoc)
-	 * @see java.lang.Object#toString()
-	 */
+	@Override
 	public String toString()
 	{
-		final StringBuffer buf = new StringBuffer();
-		buf.append("L-Data");
+		final StringBuilder buf = new StringBuilder();
+		buf.append(source).append("->").append(dst);
+		buf.append(" L_Data");
 		buf.append(mc == MC_LDATA_IND ? ".ind" : mc == MC_LDATA_REQ ? ".req" : ".con");
 		if (mc == MC_LDATA_CON)
 			buf.append(isPositiveConfirmation() ? " (pos)" : " (neg)");
-		buf.append(" from ").append(source).append(" to ").append(dst);
 		buf.append(", ").append(p).append(" priority");
 		buf.append(" hop count ").append(getHopCount());
 		if (mc != MC_LDATA_CON) {
@@ -481,7 +469,7 @@ public class CEMILData implements CEMI
 			if (isRepetition())
 				buf.append(" repeat");
 		}
-		buf.append(" tpdu ").append(DataUnitBuilder.toHex(data, " "));
+		buf.append(", tpdu ").append(DataUnitBuilder.toHex(data, " "));
 		return buf.toString();
 	}
 
@@ -505,7 +493,6 @@ public class CEMILData implements CEMI
 	 * <p>
 	 * This type does not support additional information; the additional info length is
 	 * set to 0, indicating no additional information.
-	 * <p>
 	 *
 	 * @param os the output stream
 	 */
@@ -601,9 +588,7 @@ public class CEMILData implements CEMI
 	}
 
 	/**
-	 * Set repeat flag in control field.
-	 * <p>
-	 * Note: uses message code type for decision.
+	 * Sets the repeat flag in control field, using the message code type for decision.
 	 *
 	 * @param repeat <code>true</code> for a repeat request or repeated frame,
 	 *        <code>false</code> otherwise

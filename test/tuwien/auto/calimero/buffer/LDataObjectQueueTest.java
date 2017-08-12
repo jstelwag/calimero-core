@@ -39,11 +39,11 @@ package tuwien.auto.calimero.buffer;
 import junit.framework.TestCase;
 import tuwien.auto.calimero.GroupAddress;
 import tuwien.auto.calimero.IndividualAddress;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 import tuwien.auto.calimero.Priority;
 import tuwien.auto.calimero.cemi.CEMI;
 import tuwien.auto.calimero.cemi.CEMILData;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
 
 /**
  * @author B. Malinowsky
@@ -58,6 +58,7 @@ public class LDataObjectQueueTest extends TestCase
 	{
 		LDataObjectQueue q;
 
+		@Override
 		public void queueFilled(final LDataObjectQueue queue)
 		{
 			q = queue;
@@ -75,6 +76,7 @@ public class LDataObjectQueueTest extends TestCase
 	/* (non-Javadoc)
 	 * @see junit.framework.TestCase#setUp()
 	 */
+	@Override
 	protected void setUp() throws Exception
 	{
 		l = new QueueListener();
@@ -106,6 +108,7 @@ public class LDataObjectQueueTest extends TestCase
 	/* (non-Javadoc)
 	 * @see junit.framework.TestCase#tearDown()
 	 */
+	@Override
 	protected void tearDown() throws Exception
 	{
 		super.tearDown();

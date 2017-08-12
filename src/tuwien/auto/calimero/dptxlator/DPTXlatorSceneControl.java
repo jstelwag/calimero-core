@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2013, 2015 B. Malinowsky
+    Copyright (c) 2013, 2016 B. Malinowsky
     Copyright (c) 2013 Juan Ruzafa Millán
 
     This program is free software; you can redistribute it and/or modify
@@ -41,8 +41,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.StringTokenizer;
 
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 
 /**
  * Translator for KNX DPTs with main number 18, representing <b>Scene Control</b>.
@@ -64,22 +64,19 @@ import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
 public class DPTXlatorSceneControl extends DPTXlator
 {
 	/**
-	 * DPT ID 18.001, Scene Control; activate or learn a scene, with scene numbers from <b>0</b> to
-	 * <b>63</b>.
+	 * DPT ID 18.001, Scene Control; activate or learn a scene, with scene numbers from <b>0</b> to <b>63</b>.
 	 */
-	public static final DPT DPT_SCENE_CONTROL = new DPT("18.001", "Scene Control", "activate 0",
-			"learn 63");
+	public static final DPT DPT_SCENE_CONTROL = new DPT("18.001", "Scene Control", "activate 0", "learn 63");
 
-	private static final Map types;
+	private static final Map<String, DPT> types;
 
 	static {
-		types = new HashMap(5);
+		types = new HashMap<>(5);
 		types.put(DPT_SCENE_CONTROL.getID(), DPT_SCENE_CONTROL);
 	}
 
 	/**
 	 * Creates a translator for the given datapoint type.
-	 * <p>
 	 *
 	 * @param dpt the requested datapoint type
 	 * @throws KNXFormatException on not supported or not available DPT
@@ -91,7 +88,6 @@ public class DPTXlatorSceneControl extends DPTXlator
 
 	/**
 	 * Creates a translator for the given datapoint type ID.
-	 * <p>
 	 *
 	 * @param dptID available implemented datapoint type ID
 	 * @throws KNXFormatException on wrong formatted or not expected (available) <code>dptID</code>
@@ -103,9 +99,7 @@ public class DPTXlatorSceneControl extends DPTXlator
 		data = new short[1];
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getValue()
-	 */
+	@Override
 	public String getValue()
 	{
 		return fromDPT(0);
@@ -113,7 +107,6 @@ public class DPTXlatorSceneControl extends DPTXlator
 
 	/**
 	 * Sets one new translation item, replacing any old items.
-	 * <p>
 	 *
 	 * @param control control bit to activate or learn a scene, <code>false</code> = activate,
 	 *        <code>true</code> = learn
@@ -126,7 +119,6 @@ public class DPTXlatorSceneControl extends DPTXlator
 
 	/**
 	 * Returns the scene number of the first translation item.
-	 * <p>
 	 *
 	 * @return unsigned 6 Bit using type short
 	 */
@@ -135,9 +127,7 @@ public class DPTXlatorSceneControl extends DPTXlator
 		return (short) (data[0] & 0x3F);
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getAllValues()
-	 */
+	@Override
 	public String[] getAllValues()
 	{
 		final String[] s = new String[data.length];
@@ -146,10 +136,8 @@ public class DPTXlatorSceneControl extends DPTXlator
 		return s;
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getSubTypes()
-	 */
-	public final Map getSubTypes()
+	@Override
+	public final Map<String, DPT> getSubTypes()
 	{
 		return types;
 	}
@@ -158,7 +146,7 @@ public class DPTXlatorSceneControl extends DPTXlator
 	 * @return the subtypes of the 8 Bit unsigned translator type
 	 * @see DPTXlator#getSubTypesStatic()
 	 */
-	protected static Map getSubTypesStatic()
+	protected static Map<String, DPT> getSubTypesStatic()
 	{
 		return types;
 	}
@@ -171,6 +159,7 @@ public class DPTXlatorSceneControl extends DPTXlator
 		return new StringTokenizer(value).nextToken() + " " + scene;
 	}
 
+	@Override
 	protected void toDPT(final String value, final short[] dst, final int index)
 		throws KNXFormatException
 	{

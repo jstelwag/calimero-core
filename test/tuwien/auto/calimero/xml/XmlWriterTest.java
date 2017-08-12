@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2014 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -46,12 +46,9 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.util.List;
-import java.util.Vector;
 
 import junit.framework.TestCase;
 import tuwien.auto.calimero.Util;
-import tuwien.auto.calimero.exception.KNXIllegalStateException;
-import tuwien.auto.calimero.xml.def.DefaultXMLWriter;
 
 /**
  * @author B. Malinowsky
@@ -60,7 +57,7 @@ public class XmlWriterTest extends TestCase
 {
 	private static final String file = Util.getTargetPath() + "write.xml";
 	private Writer out;
-	private XMLWriter w, w2;
+	private XmlWriter w, w2;
 	private ByteArrayOutputStream stream;
 
 	/**
@@ -74,18 +71,20 @@ public class XmlWriterTest extends TestCase
 	/* (non-Javadoc)
 	 * @see junit.framework.TestCase#setUp()
 	 */
+	@Override
 	protected void setUp() throws Exception
 	{
 		out = new FileWriter(file);
-		w = new DefaultXMLWriter(out, true);
+		w = XmlOutputFactory.newInstance().createXMLStreamWriter(out);
 		stream = new ByteArrayOutputStream();
 		final OutputStreamWriter buf = new OutputStreamWriter(stream);
-		w2 = new DefaultXMLWriter(buf, true);
+		w2 = XmlOutputFactory.newInstance().createXMLStreamWriter(buf);
 	}
 
 	/* (non-Javadoc)
 	 * @see junit.framework.TestCase#tearDown()
 	 */
+	@Override
 	protected void tearDown() throws Exception
 	{
 		w.close();
@@ -95,14 +94,13 @@ public class XmlWriterTest extends TestCase
 
 	/**
 	 * Test method for
-	 * {@link tuwien.auto.calimero.xml.def.DefaultXMLWriter#DefaultXMLWriter
+	 * {@link tuwien.auto.calimero.xml.DefaultXmlWriter#DefaultXmlWriter
 	 * (Writer, boolean)}.
 	 */
 	public void testXmlWriter()
 	{
-		try {
-			final XMLWriter w = new DefaultXMLWriter(out, true);
-			w.endAllElements();
+		try (final XmlWriter w = new DefaultXmlWriter(out)) {
+			w.writeEndDocument();
 		}
 		catch (final KNXMLException e) {
 			fail("on creation of xml writer");
@@ -110,38 +108,41 @@ public class XmlWriterTest extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.xml.def.DefaultXMLWriter#endElement()}.
-	 * 
+	 * Test method for {@link tuwien.auto.calimero.xml.DefaultXmlWriter#writeEndElement()}.
+	 *
 	 * @throws KNXMLException
 	 */
 	public void testEndElement() throws KNXMLException
 	{
 		try {
-			w.endElement();
+			w.writeEndElement();
 			fail("illegal state");
 		}
-		catch (final KNXIllegalStateException e) {}
-		w.endAllElements();
+		catch (final KNXMLException e) {}
+		w.writeEndDocument();
 		assertEquals(0, new File(file).length());
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.xml.def.DefaultXMLWriter#endElement()}.
-	 * 
+	 * Test method for {@link tuwien.auto.calimero.xml.DefaultXmlWriter#writeEndElement()}.
+	 *
 	 * @throws IOException
 	 * @throws KNXMLException
 	 */
 	public void testEndElement2() throws IOException, KNXMLException
 	{
-		w.writeElement("element", null, "test text");
-		w.endElement();
-		w.endAllElements();
+		w.writeStartElement("element");
+		w.writeCharacters("test text");
+		w.writeEndElement();
+		w.writeEndDocument();
+		w.close();
 		assertTrue(new File(file).length() > 0);
 
-		w2.writeElement("element", null, "test text");
-		w2.endElement();
-		w2.endAllElements();
-
+		w2.writeStartElement("element");
+		w2.writeCharacters("test text");
+		w2.writeEndElement();
+		w2.writeEndDocument();
+		w2.close();
 		final BufferedReader r = getInput("<element>test text</element>");
 		final BufferedReader r2 = getInput(stream.toString());
 		assertEquals(r.readLine(), r2.readLine());
@@ -149,38 +150,43 @@ public class XmlWriterTest extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.xml.def.DefaultXMLWriter#endElement()}.
-	 * 
+	 * Test method for {@link tuwien.auto.calimero.xml.DefaultXmlWriter#writeEndElement()}.
+	 *
 	 * @throws IOException
 	 * @throws KNXMLException
 	 */
 	public void testEndElement3() throws IOException, KNXMLException
 	{
-		final List att = new Vector();
-		att.add(new Attribute("att1", "value1"));
-
-		w2.writeElement("root", null, "test text");
-		w2.writeElement("child1", att, "test text");
-		att.add(new Attribute("att2", "value2"));
-		w2.writeElement("child2", att, "test text");
-		w2.endElement();
-		att.add(new Attribute("att3", "value3"));
-		w2.writeElement("child3", att, "test text");
-		w2.endElement();
-		w2.endElement();
-		w2.endElement();
+		w2.writeStartElement("root");
+		w2.writeCharacters("test text");
+		w2.writeStartElement("child1");
+		w2.writeAttribute("att1", "value1");
+		w2.writeCharacters("test text");
+		w2.writeStartElement("child2");
+		w2.writeAttribute("att1", "value1");
+		w2.writeAttribute("att2", "value2");
+		w2.writeCharacters("test text");
+		w2.writeEndElement();
+		w2.writeStartElement("child3");
+		w2.writeAttribute("att1", "value1");
+		w2.writeAttribute("att2", "value2");
+		w2.writeAttribute("att3", "value3");
+		w2.writeCharacters("test text");
+		w2.writeEndElement();
+		w2.writeEndElement();
+		w2.writeEndElement();
 		try {
-			w2.endElement();
+			w2.writeEndElement();
 			fail("illegal state");
 		}
-		catch (final KNXIllegalStateException e) {}
-		w2.endAllElements();
-
+		catch (final KNXMLException e) {}
+		w2.writeEndDocument();
+		w2.close();
 		final BufferedReader r =
-			getInput("<root>test text\n" + "    <child1 att1=\"value1\">test text\n"
-				+ "        <child2 att1=\"value1\" att2=\"value2\">test text</child2>\n"
-				+ "        <child3 att1=\"value1\" att2=\"value2\" att3=\"value3\">"
-				+ "test text</child3>\n    </child1>\n" + "</root>\n");
+			getInput("<root>test text<child1 att1=\"value1\">test text"
+				+ "<child2 att1=\"value1\" att2=\"value2\">test text</child2>"
+				+ "<child3 att1=\"value1\" att2=\"value2\" att3=\"value3\">"
+				+ "test text</child3></child1>" + "</root>");
 		final BufferedReader r2 = getInput(stream.toString());
 		while (true) {
 			final String s = r.readLine();
@@ -195,27 +201,28 @@ public class XmlWriterTest extends TestCase
 
 	/**
 	 * Test method for
-	 * {@link tuwien.auto.calimero.xml.def.DefaultXMLWriter#endAllElements()}.
-	 * 
+	 * {@link tuwien.auto.calimero.xml.DefaultXmlWriter#writeEndDocument()}.
+	 *
 	 * @throws IOException
 	 * @throws KNXMLException
 	 */
 	public void testEndAllElements() throws IOException, KNXMLException
 	{
-		final List att = new Vector();
-		att.add(new Attribute("att1", "value1"));
-
-		w2.writeEmptyElement("root", null);
-		w2.writeEmptyElement("child1", att);
-		w2.writeElement("child2", att, "");
-		w2.writeElement("child3", att, "test text");
-		w2.endAllElements();
-		w2.endAllElements();
-
+		w2.writeEmptyElement("root");
+		w2.writeEmptyElement("child1");
+		w2.writeAttribute("att1", "value1");
+//		w2.writeEndElement();
+		w2.writeStartElement("child2");
+		w2.writeAttribute("att1", "value1");
+		w2.writeStartElement("child3");
+		w2.writeAttribute("att1", "value1");
+		w2.writeCharacters("test text");
+		w2.writeEndDocument();
+		w2.close();
 		final BufferedReader r =
-			getInput("<root />\n" + "<child1 att1=\"value1\" />\n"
-				+ "<child2 att1=\"value1\">\n"
-				+ "    <child3 att1=\"value1\">test text</child3>\n" + "</child2>");
+			getInput("<root/>" + "<child1 att1=\"value1\"/>"
+				+ "<child2 att1=\"value1\">"
+				+ "<child3 att1=\"value1\">test text</child3>" + "</child2>");
 		final BufferedReader r2 = getInput(stream.toString());
 		while (true) {
 			final String s = r.readLine();
@@ -229,34 +236,38 @@ public class XmlWriterTest extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.xml.def.DefaultXMLWriter#writeElement
+	 * Test method for {@link tuwien.auto.calimero.xml.DefaultXmlWriter#writeStartElement
 	 * (String, List, String)}.
-	 * 
+	 *
 	 * @throws IOException
 	 * @throws KNXMLException
 	 */
 	public void testWriteElement() throws IOException, KNXMLException
 	{
-		final List att = new Vector();
-		att.add(new Attribute("att1", "value1"));
-
-		w2.writeElement("root", null, "test text");
-		w2.writeElement("child1", att, "xyz");
-		w2.writeElement("child2", null, "");
-		w2.writeEmptyElement("child3", att);
-		w2.endElement();
-		w2.writeEmptyElement("child3", att);
-		w2.writeElement("child3", null, "");
-		w2.endElement();
-		w2.endAllElements();
-		w2.writeEmptyElement("root", null);
-		w2.endAllElements();
+		w2.writeStartElement("root");
+		w2.writeCharacters("test text");
+		w2.writeStartElement("child1");
+		w2.writeAttribute("att1", "value1");
+		w2.writeCharacters("xyz");
+		w2.writeStartElement("child2");
+		w2.writeCharacters("");
+		w2.writeEmptyElement("child3");
+		w2.writeAttribute("att1", "value1");
+		w2.writeEndElement();
+		w2.writeEmptyElement("child3");
+		w2.writeAttribute("att1", "value1");
+		w2.writeStartElement("child3");
+		w2.writeEndElement();
+		w2.writeEndDocument();
+		w2.writeEmptyElement("root");
+		w2.writeEndDocument();
+		w2.close();
 		final BufferedReader r =
-			getInput("<root>test text\n" + "    <child1 att1=\"value1\">xyz\n"
-				+ "        <child2>\n" + "            <child3 att1=\"value1\" />\n"
-				+ "        </child2>\n" + "        <child3 att1=\"value1\" />\n"
-				+ "        <child3></child3>\n" + "    </child1>\n" + "</root>\n"
-				+ "<root />\n");
+			getInput("<root>test text" + "<child1 att1=\"value1\">xyz"
+				+ "<child2>" + "<child3 att1=\"value1\"/>"
+				+ "</child2>" + "<child3 att1=\"value1\"/>"
+				+ "<child3></child3>" + "</child1>" + "</root>"
+				+ "<root/>");
 
 		final BufferedReader r2 = getInput(stream.toString());
 		while (true) {
@@ -275,16 +286,16 @@ public class XmlWriterTest extends TestCase
 	 */
 	public void testWriteCommentCharData() throws KNXMLException
 	{
-		w.writeElement("root", null, null);
+		w.writeStartElement("root");
 		w.writeComment("character data follows");
-		w.writeCharData("hello XML! ", false);
-		w.writeCharData("hello tags &lt; < &gt; > ", true);
-		w.endAllElements();
+		w.writeCharacters("hello XML! ");
+		w.writeCData("hello tags &lt; < &gt; > ");
+		w.writeEndDocument();
 		w.close();
-		final XMLReader r = XMLFactory.getInstance().createXMLReader(file);
-		r.read();
-		r.complete(r.getCurrent());
-		assertEquals("\n    hello XML! hello tags &lt; < &gt; > ", r.getCurrent().getCharacterData());
+		final XmlReader r = XmlInputFactory.newInstance().createXMLReader(file);
+		r.nextTag();
+		final String s = "\n    hello XML! hello tags &lt; < &gt; > ".replace("\n    ", "");
+		assertEquals(s, r.getElementText());
 	}
 
 	private BufferedReader getInput(final String text)

@@ -44,17 +44,15 @@ import java.util.List;
 import tuwien.auto.calimero.DataUnitBuilder;
 import tuwien.auto.calimero.IndividualAddress;
 import tuwien.auto.calimero.KNXAddress;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 import tuwien.auto.calimero.Priority;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
 
 /**
- * A cEMI link layer data message (L-Data).
+ * A cEMI link layer data message (L-Data) supporting extended frame formats and cEMI additional information, with a
+ * transport layer protocol data unit maximum of 255 bytes.
  * <p>
- * Extended frame formats are supported, with a transport layer protocol data unit of 255 bytes
- * maximum. Additional information might be specified.
- * <p>
- * Objects of this L-Data type are <b>not</b> immutable.
+ * In contrast to CEMILData, objects of this L-Data type are mutable.
  *
  * @author B. Malinowsky
  */
@@ -63,7 +61,7 @@ public class CEMILDataEx extends CEMILData implements Cloneable
 	/**
 	 * Holds an additional info type with corresponding information data.
 	 */
-	public static final class AddInfo
+	public static class AddInfo
 	{
 		private final int type;
 		private final byte[] data;
@@ -230,7 +228,7 @@ public class CEMILDataEx extends CEMILData implements Cloneable
 	 *        not repeat if error, <code>true</code> for default repeat behavior; meaning of default
 	 *        behavior on media:
 	 *        <ul>
-	 *        <li>PL132, RF: no repetitions</li>
+	 *        <li>RF: no repetitions</li>
 	 *        <li>TP1, PL110: repetitions allowed</li>
 	 *        </ul>
 	 *        for indication message - <code>true</code> if is repeated frame, <code>false</code>
@@ -241,11 +239,9 @@ public class CEMILDataEx extends CEMILData implements Cloneable
 	 * @param ack acknowledge request, <code>true</code> if acknowledge is requested,
 	 *        <code>false</code> for default behavior; meaning of default behavior on media:
 	 *        <ul>
-	 *        <li>PL132: no acknowledge requested</li>
 	 *        <li>TP1, PL110: acknowledge requested</li>
 	 *        </ul>
-	 * @param hopCount hop count starting value set in control field, in the range 0 &le; value &le;
-	 *        7
+	 * @param hopCount hop count starting value set in control field, in the range 0 &le; value &le; 7
 	 */
 	public CEMILDataEx(final int msgCode, final IndividualAddress src, final KNXAddress dst,
 		final byte[] tpdu, final Priority p, final boolean repeat, final boolean broadcast,
@@ -270,7 +266,7 @@ public class CEMILDataEx extends CEMILData implements Cloneable
 	 *        not repeat if error, <code>true</code> for default repeat behavior; meaning of default
 	 *        behavior on media:
 	 *        <ul>
-	 *        <li>PL132, RF: no repetitions</li>
+	 *        <li>RF: no repetitions</li>
 	 *        <li>TP1, PL110: repetitions allowed</li>
 	 *        </ul>
 	 *        for indication message - <code>true</code> if is repeated frame, <code>false</code>
@@ -308,12 +304,12 @@ public class CEMILDataEx extends CEMILData implements Cloneable
 	 *
 	 * @return a List with {@link AddInfo} objects
 	 */
-	public synchronized List getAdditionalInfo()
+	public synchronized List<AddInfo> getAdditionalInfo()
 	{
-		final List l = new ArrayList();
+		final List<AddInfo> l = new ArrayList<>();
 		for (int i = 0; i < addInfo.length; ++i)
 			if (addInfo[i] != null)
-				l.add(new AddInfo(i, (byte[]) addInfo[i].clone()));
+				l.add(new AddInfo(i, addInfo[i].clone()));
 		return l;
 	}
 
@@ -327,13 +323,11 @@ public class CEMILDataEx extends CEMILData implements Cloneable
 	public synchronized byte[] getAdditionalInfo(final int infoType)
 	{
 		if (infoType < addInfo.length && addInfo[infoType] != null)
-			return (byte[]) addInfo[infoType].clone();
+			return addInfo[infoType].clone();
 		return null;
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.cemi.CEMILData#getStructLength()
-	 */
+	@Override
 	public int getStructLength()
 	{
 		return super.getStructLength() + getAddInfoLength();
@@ -356,6 +350,7 @@ public class CEMILDataEx extends CEMILData implements Cloneable
 	 * @param domainOnly <code>true</code> for doing a broadcast only within the domain,
 	 *        <code>false</code> for a system broadcast
 	 */
+	@Override
 	public synchronized void setBroadcast(final boolean domainOnly)
 	{
 		super.setBroadcast(domainOnly);
@@ -386,30 +381,25 @@ public class CEMILDataEx extends CEMILData implements Cloneable
 			addInfo[infoType] = null;
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.cemi.CEMILData#setHopCount(int)
-	 */
+	@Override
 	public final synchronized void setHopCount(final int hobbes)
 	{
 		super.setHopCount(hobbes);
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.cemi.CEMILData#setPriority(tuwien.auto.calimero.Priority)
-	 */
+	@Override
 	public final void setPriority(final Priority p)
 	{
 		super.setPriority(p);
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.cemi.CEMILData#toByteArray()
-	 */
+	@Override
 	public synchronized byte[] toByteArray()
 	{
 		return super.toByteArray();
 	}
 
+	@Override
 	public String toString()
 	{
 		final String s = super.toString();
@@ -424,7 +414,7 @@ public class CEMILDataEx extends CEMILData implements Cloneable
 					buf.append(Integer.toHexString((info[0] & 0xff) << 8 | info[1] & 0xff));
 				}
 				else if (i == ADDINFO_RFMEDIUM)
-					buf.append(" RF-info 0x").append(DataUnitBuilder.toHex(info, " "));
+					buf.append(" ").append(new RFMediumInfo(info, !isDomainBroadcast())).append(",");
 				else if (i == ADDINFO_TIMESTAMP) {
 					buf.append(" timestamp ");
 					buf.append((info[0] & 0xff) << 8 | info[1] & 0xff);
@@ -442,9 +432,7 @@ public class CEMILDataEx extends CEMILData implements Cloneable
 		return buf.toString();
 	}
 
-	/* (non-Javadoc)
-	 * @see java.lang.Object#clone()
-	 */
+	@Override
 	public Object clone()
 	{
 		try {
@@ -452,16 +440,15 @@ public class CEMILDataEx extends CEMILData implements Cloneable
 			clone.data = getPayload();
 			// the byte arrays with additional info content are used internal only
 			// and don't need to be cloned
-			clone.addInfo = (byte[][]) clone.addInfo.clone();
+			clone.addInfo = clone.addInfo.clone();
 			return clone;
 		}
-		catch (final CloneNotSupportedException ignored) {}
-		return null;
+		catch (final CloneNotSupportedException ignore) {
+			throw new UnsupportedOperationException("cloning cEMI L-Data", ignore);
+		}
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.cemi.CEMILData#readAddInfo(java.io.ByteArrayInputStream)
-	 */
+	@Override
 	void readAddInfo(final ByteArrayInputStream is) throws KNXFormatException
 	{
 		final int ail = is.read();
@@ -485,9 +472,7 @@ public class CEMILDataEx extends CEMILData implements Cloneable
 		}
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.cemi.CEMILData#readPayload(java.io.ByteArrayInputStream)
-	 */
+	@Override
 	void readPayload(final ByteArrayInputStream is) throws KNXFormatException
 	{
 		int len = is.read();
@@ -508,6 +493,7 @@ public class CEMILDataEx extends CEMILData implements Cloneable
 	 *
 	 * @param os the output stream
 	 */
+	@Override
 	synchronized void writeAddInfo(final ByteArrayOutputStream os)
 	{
 		os.write(getAddInfoLength());
@@ -519,9 +505,7 @@ public class CEMILDataEx extends CEMILData implements Cloneable
 			}
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.cemi.CEMILData#writePayload(java.io.ByteArrayOutputStream)
-	 */
+	@Override
 	void writePayload(final ByteArrayOutputStream os)
 	{
 		// RF frames don't use NPDU length field
@@ -529,16 +513,14 @@ public class CEMILDataEx extends CEMILData implements Cloneable
 		os.write(data, 0, data.length);
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.cemi.CEMILData#isValidTPDULength(byte[])
-	 */
+	@Override
 	boolean isValidTPDULength(final byte[] tpdu)
 	{
 		// value of length field is limited to 254, 255 is reserved as ESC code
 		return tpdu.length <= 255;
 	}
 
-	private boolean checkAddInfoLength(final int infoType, final int len)
+	private static boolean checkAddInfoLength(final int infoType, final int len)
 	{
 		if (len > 255)
 			throw new KNXIllegalArgumentException(
@@ -564,7 +546,7 @@ public class CEMILDataEx extends CEMILData implements Cloneable
 			System.arraycopy(addInfo, 0, newInfo, 0, addInfo.length);
 			addInfo = newInfo;
 		}
-		addInfo[infoType] = (byte[]) info.clone();
+		addInfo[infoType] = info.clone();
 	}
 
 	private long toLong(final byte[] data)

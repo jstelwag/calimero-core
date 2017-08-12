@@ -36,24 +36,18 @@
 
 package tuwien.auto.calimero;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.StringTokenizer;
 
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.xml.Attribute;
-import tuwien.auto.calimero.xml.Element;
 import tuwien.auto.calimero.xml.KNXMLException;
-import tuwien.auto.calimero.xml.XMLReader;
-import tuwien.auto.calimero.xml.XMLWriter;
+import tuwien.auto.calimero.xml.XmlReader;
+import tuwien.auto.calimero.xml.XmlWriter;
 
 /**
  * Represents a KNX address.
  * <p>
  * An address consists of a 16 Bit unsigned value. Concrete implementations of address are
- * {@link GroupAddress} and {@link IndividualAddress}. Instances of
- * <code>KNXAddress</code> are immutable.<br>
+ * {@link GroupAddress} and {@link IndividualAddress}. Instances of <code>KNXAddress</code> are
+ * immutable.<br>
  * Loading and saving KNX addresses in XML format is supported.
  */
 public abstract class KNXAddress
@@ -65,7 +59,6 @@ public abstract class KNXAddress
 
 	/**
 	 * Creates a KNX address from a 16 Bit address value.
-	 * <p>
 	 *
 	 * @param address the address value in the range [0..0xffff]
 	 */
@@ -77,11 +70,10 @@ public abstract class KNXAddress
 	/**
 	 * Creates a KNX address from a byte array.
 	 * <p>
-	 * The address is read out of the first 2 byte fields, while the address array itself
-	 * might be longer. The content of <code>address</code> is not modified.
+	 * The address is read out of the first 2 byte fields, while the address array itself might be
+	 * longer. The content of <code>address</code> is not modified.
 	 *
-	 * @param address the address byte array in big-endian format, with address.length >=
-	 *        2
+	 * @param address the address byte array in big-endian format, with address.length &ge; 2
 	 */
 	KNXAddress(final byte[] address)
 	{
@@ -100,17 +92,15 @@ public abstract class KNXAddress
 	 * @throws KNXMLException if the XML element represents no KNX address or the address
 	 *         couldn't be read correctly
 	 */
-	KNXAddress(final XMLReader r) throws KNXMLException
+	KNXAddress(final XmlReader r) throws KNXMLException
 	{
-		if (r.getPosition() != XMLReader.START_TAG)
-			r.read();
-		final Element e = r.getCurrent();
-		if (r.getPosition() != XMLReader.START_TAG || !e.getName().equals(TAG_ADDRESS)
-				|| !getType().equals(e.getAttribute(ATTR_TYPE)))
+		if (r.getEventType() != XmlReader.START_ELEMENT)
+			r.nextTag();
+		if (r.getEventType() != XmlReader.START_ELEMENT || !r.getLocalName().equals(TAG_ADDRESS)
+				|| !getType().equals(r.getAttributeValue(null, ATTR_TYPE)))
 			throw new KNXMLException("XML element represents no KNX " + getType() + " address", r);
-		r.complete(e);
 		try {
-			init(e.getCharacterData());
+			init(r.getElementText());
 		}
 		catch (final KNXFormatException kfe) {
 			throw new KNXMLException("malformed KNX address value, " + kfe.getMessage(), r);
@@ -119,7 +109,6 @@ public abstract class KNXAddress
 
 	/**
 	 * Creates KNX address 0 (reserved address).
-	 * <p>
 	 */
 	KNXAddress()
 	{}
@@ -127,21 +116,20 @@ public abstract class KNXAddress
 	/**
 	 * Creates a KNX address from xml input.
 	 * <p>
-	 * The KNX address element is expected to be the current or next element from the
-	 * parser.
+	 * The KNX address element is expected to be the current or next element from the parser.
 	 *
 	 * @param r a XML reader
 	 * @return the created KNXAddress, either of subtype {@link GroupAddress} or
 	 *         {@link IndividualAddress}
-	 * @throws KNXMLException if the XML element is no KNX address, on unknown address
-	 *         type or wrong address syntax
+	 * @throws KNXMLException if the XML element is no KNX address, on unknown address type or wrong
+	 *         address syntax
 	 */
-	public static KNXAddress create(final XMLReader r) throws KNXMLException
+	public static KNXAddress create(final XmlReader r) throws KNXMLException
 	{
-		if (r.getPosition() != XMLReader.START_TAG)
-			r.read();
-		if (r.getPosition() == XMLReader.START_TAG) {
-			final String type = r.getCurrent().getAttribute(ATTR_TYPE);
+		if (r.getEventType() != XmlReader.START_ELEMENT)
+			r.nextTag();
+		if (r.getEventType() == XmlReader.START_ELEMENT) {
+			final String type = r.getAttributeValue(null, ATTR_TYPE);
 			if (GroupAddress.ATTR_GROUP.equals(type))
 				return new GroupAddress(r);
 			else if (IndividualAddress.ATTR_IND.equals(type))
@@ -194,18 +182,17 @@ public abstract class KNXAddress
 
 	/**
 	 * Writes the KNX address in XML format to the supplied writer.
-	 * <p>
 	 *
 	 * @param w a XML writer
 	 * @throws KNXMLException on output error
 	 */
-	public void save(final XMLWriter w) throws KNXMLException
+	public void save(final XmlWriter w) throws KNXMLException
 	{
-		final List att = new ArrayList();
-		att.add(new Attribute(ATTR_TYPE, getType()));
 		w.writeComment(" " + toString() + " ");
-		w.writeElement(TAG_ADDRESS, att, Integer.toString(address));
-		w.endElement();
+		w.writeStartElement(TAG_ADDRESS);
+		w.writeAttribute(ATTR_TYPE, getType());
+		w.writeCharacters(Integer.toString(address));
+		w.writeEndElement();
 	}
 
 	/**

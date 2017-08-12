@@ -39,9 +39,9 @@ package tuwien.auto.calimero.dptxlator;
 import java.util.HashMap;
 import java.util.Map;
 
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.exception.KNXIllegalStateException;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXIllegalStateException;
 
 /**
  * Translator for KNX DPTs with main number 6, type <b>8 Bit signed value</b>. The KNX data type
@@ -71,10 +71,10 @@ public class DPTXlator8BitSigned extends DPTXlator
 	public static final DPT DPT_STATUS_MODE3 = new DPT("6.020", "status with mode", "0/0/0/0/0 0",
 			"1/1/1/1/1 2");
 
-	private static final Map types;
+	private static final Map<String, DPT> types;
 
 	static {
-		types = new HashMap();
+		types = new HashMap<>();
 		types.put(DPT_PERCENT_V8.getID(), DPT_PERCENT_V8);
 		types.put(DPT_VALUE_1_UCOUNT.getID(), DPT_VALUE_1_UCOUNT);
 		types.put(DPT_STATUS_MODE3.getID(), DPT_STATUS_MODE3);
@@ -107,9 +107,7 @@ public class DPTXlator8BitSigned extends DPTXlator
 			data[0] = 1;
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getValue()
-	 */
+	@Override
 	public String getValue()
 	{
 		return makeString(0);
@@ -126,14 +124,13 @@ public class DPTXlator8BitSigned extends DPTXlator
 		data = new short[] { toDPT(value) };
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getNumericValue()
-	 */
+	@Override
 	public double getNumericValue()
 	{
 		return getValueSigned();
 	}
 
+	// ??? public for consistency
 	byte getValueSigned()
 	{
 		return fromDPT(data[0]);
@@ -142,6 +139,7 @@ public class DPTXlator8BitSigned extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getAllValues()
 	 */
+	@Override
 	public String[] getAllValues()
 	{
 		final String[] s = new String[data.length];
@@ -179,6 +177,7 @@ public class DPTXlator8BitSigned extends DPTXlator
 		data = new short[] { (short) (status | enc) };
 	}
 
+	// TODO status would be better be done as enum set?
 	// 0 = set, 1 = clear
 	boolean isStatusBitSet()
 	{
@@ -199,14 +198,12 @@ public class DPTXlator8BitSigned extends DPTXlator
 			throw new KNXIllegalStateException("translator not set to DPT 6.020 (Status with Mode)");
 		final int enc = data[0] & 0x07;
 		if (enc != 1 && enc != 2 && enc != 4)
-			; //throw new KNXFormatException("invalid mode encoding " + enc + " out of {1, 2, 4}");
+			throw new KNXIllegalStateException("invalid mode encoding " + enc + " out of {1, 2, 4}");
 		return enc == 1 ? 0 : enc == 2 ? 1 : 2;
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getSubTypes()
-	 */
-	public final Map getSubTypes()
+	@Override
+	public final Map<String, DPT> getSubTypes()
 	{
 		return types;
 	}
@@ -215,7 +212,7 @@ public class DPTXlator8BitSigned extends DPTXlator
 	 * @return the subtypes of the 8 Bit signed translator type
 	 * @see DPTXlator#getSubTypesStatic()
 	 */
-	protected static Map getSubTypesStatic()
+	protected static Map<String, DPT> getSubTypesStatic()
 	{
 		return types;
 	}
@@ -239,6 +236,7 @@ public class DPTXlator8BitSigned extends DPTXlator
 		return appendUnit(Short.toString(fromDPT(data[index])));
 	}
 
+	@Override
 	protected void toDPT(final String value, final short[] dst, final int index)
 		throws KNXFormatException
 	{

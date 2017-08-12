@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2011 B. Malinowsky
+    Copyright (c) 2006, 2014 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -38,12 +38,13 @@ package tuwien.auto.calimero.knxnetip.util;
 
 import java.io.ByteArrayOutputStream;
 
+import org.slf4j.Logger;
+
 import tuwien.auto.calimero.DataUnitBuilder;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 import tuwien.auto.calimero.knxnetip.KNXnetIPDevMgmt;
 import tuwien.auto.calimero.knxnetip.KNXnetIPTunnel;
-import tuwien.auto.calimero.log.LogManager;
 import tuwien.auto.calimero.log.LogService;
 
 /**
@@ -53,7 +54,7 @@ import tuwien.auto.calimero.log.LogService;
  */
 class CRBase
 {
-	static final LogService logger = LogManager.getManager().getLogService("KNXnet/IP service");
+	static final Logger logger = LogService.getLogger("KNXnet/IP service");
 
 	byte[] opt;
 	private final int connType;
@@ -62,7 +63,7 @@ class CRBase
 	/**
 	 * Creates a new CR out of a byte array.
 	 * <p>
-	 * 
+	 *
 	 * @param data byte array containing a CRI or CRD structure
 	 * @param offset start offset
 	 * @throws KNXFormatException on invalid structure
@@ -84,11 +85,11 @@ class CRBase
 	 * <p>
 	 * The array of <code>optionalData</code> is not copied for internal storage. No
 	 * additional checks regarding content are done.
-	 * 
+	 *
 	 * @param connectionType connection type the CR is used for
 	 * @param optionalData byte array containing optional host protocol independent and
 	 *        dependent data, this information is located starting at offset 2 in the CR
-	 *        structure, <code>optionalData.length</code> < 254
+	 *        structure, <code>optionalData.length</code> &lt; 254
 	 */
 	CRBase(final int connectionType, final byte[] optionalData)
 	{
@@ -125,14 +126,14 @@ class CRBase
 		if (type != KNXnetIPDevMgmt.DEVICE_MGMT_CONNECTION)
 			logger.warn("unknown connection type 0x" + Integer.toHexString(type)
 					+ ", create default CRI/CRD");
-		return request ? (CRBase) new CRI(type, (byte[]) opt.clone()) : new CRD(type,
-				(byte[]) opt.clone());
+		return request ? (CRBase) new CRI(type, opt.clone()) : new CRD(type,
+				opt.clone());
 	}
 
 	/**
 	 * Returns the used connection type code.
 	 * <p>
-	 * 
+	 *
 	 * @return connection type as unsigned byte
 	 */
 	public final int getConnectionType()
@@ -144,18 +145,18 @@ class CRBase
 	 * Returns a copy of the optional data field.
 	 * <p>
 	 * Optional data starts at offset 2 in the CR structure.
-	 * 
+	 *
 	 * @return byte array with optional data
 	 */
 	public final byte[] getOptionalData()
 	{
-		return (byte[]) opt.clone();
+		return opt.clone();
 	}
 
 	/**
 	 * Returns the structure length of this CR in bytes.
 	 * <p>
-	 * 
+	 *
 	 * @return structure length as unsigned byte
 	 */
 	public final int getStructLength()
@@ -166,19 +167,20 @@ class CRBase
 	/**
 	 * Returns a textual representation of the connection type, length and optional data.
 	 * <p>
-	 * 
+	 *
 	 * @return a string representation of this object
 	 */
+	@Override
 	public String toString()
 	{
 		return "connection type " + connType + " length " + length + " data "
 				+ (opt.length == 0 ? "-" : DataUnitBuilder.toHex(opt, " "));
 	}
-	
+
 	/**
 	 * Returns the byte representation of the whole CR structure.
 	 * <p>
-	 * 
+	 *
 	 * @return byte array containing structure
 	 */
 	public byte[] toByteArray()

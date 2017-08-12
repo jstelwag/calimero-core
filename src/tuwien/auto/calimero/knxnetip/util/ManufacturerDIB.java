@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2011 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -37,8 +37,8 @@
 package tuwien.auto.calimero.knxnetip.util;
 
 import tuwien.auto.calimero.DataUnitBuilder;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 
 /**
  * Represents a manufacturer data description information block.
@@ -47,7 +47,7 @@ import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
  * information, no specific content parsing is done.
  * <p>
  * Objects of this type are immutable.
- * 
+ *
  * @author B. Malinowsky
  */
 public class ManufacturerDIB extends DIB
@@ -58,7 +58,7 @@ public class ManufacturerDIB extends DIB
 	/**
 	 * Creates a manufacturer data DIB out of a byte array.
 	 * <p>
-	 * 
+	 *
 	 * @param data byte array containing manufacturer data DIB structure
 	 * @param offset start offset of DIB in <code>data</code>
 	 * @throws KNXFormatException if no DIB found or invalid structure
@@ -80,7 +80,7 @@ public class ManufacturerDIB extends DIB
 	 * Creates a manufacturer data DIB using a manufacturer identifier and a byte array
 	 * with manufacturer specific data.
 	 * <p>
-	 * 
+	 *
 	 * @param mfrID KNX manufacturer identifier, assigned by Konnex
 	 * @param mfrSpecificData
 	 */
@@ -90,14 +90,14 @@ public class ManufacturerDIB extends DIB
 		if (mfrID < 0 || mfrID > 0xffff)
 			throw new KNXIllegalArgumentException("manufacturer ID out of range [0..0xffff]");
 		id = mfrID;
-		mfrData = (byte[]) mfrSpecificData.clone();
+		mfrData = mfrSpecificData.clone();
 	}
-	
+
 	/**
 	 * Returns the KNX manufacturer ID.
 	 * <p>
 	 * The ID clearly identifies the manufacturer who created this DIB structure.
-	 * 
+	 *
 	 * @return ID as unsigned 16 bit value
 	 */
 	public final int getID()
@@ -109,17 +109,18 @@ public class ManufacturerDIB extends DIB
 	 * Returns the manufacturer specific description data.
 	 * <p>
 	 * This data block starts at byte offset 4 in the DIB structure.
-	 * 
+	 *
 	 * @return byte array with manufacturer data
 	 */
 	public final byte[] getData()
 	{
-		return (byte[]) mfrData.clone();
+		return mfrData.clone();
 	}
 
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.knxnetip.util.DIB#toByteArray()
 	 */
+	@Override
 	public byte[] toByteArray()
 	{
 		final byte[] buf = super.toByteArray();
@@ -133,12 +134,13 @@ public class ManufacturerDIB extends DIB
 	/**
 	 * Returns a textual representation of this manufacturer DIB.
 	 * <p>
-	 * 
+	 *
 	 * @return a string representation of the DIB object
 	 */
+	@Override
 	public String toString()
 	{
 		return "KNX manufacturer ID 0x" + Integer.toHexString(id) + ", data 0x"
-				+ DataUnitBuilder.toHex(mfrData, null);
+				+ DataUnitBuilder.toHex(mfrData, "");
 	}
 }

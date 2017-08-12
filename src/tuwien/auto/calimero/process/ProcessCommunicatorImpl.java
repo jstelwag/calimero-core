@@ -36,16 +36,27 @@
 
 package tuwien.auto.calimero.process;
 
-import java.util.EventListener;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
+
+import org.slf4j.Logger;
 
 import tuwien.auto.calimero.CloseEvent;
 import tuwien.auto.calimero.DataUnitBuilder;
 import tuwien.auto.calimero.DetachEvent;
 import tuwien.auto.calimero.FrameEvent;
 import tuwien.auto.calimero.GroupAddress;
+import tuwien.auto.calimero.KNXException;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXIllegalStateException;
+import tuwien.auto.calimero.KNXInvalidResponseException;
+import tuwien.auto.calimero.KNXRemoteException;
+import tuwien.auto.calimero.KNXTimeoutException;
 import tuwien.auto.calimero.Priority;
+import tuwien.auto.calimero.cemi.CEMI;
 import tuwien.auto.calimero.cemi.CEMILData;
 import tuwien.auto.calimero.datapoint.Datapoint;
 import tuwien.auto.calimero.dptxlator.DPT;
@@ -57,19 +68,10 @@ import tuwien.auto.calimero.dptxlator.DPTXlator8BitUnsigned;
 import tuwien.auto.calimero.dptxlator.DPTXlatorBoolean;
 import tuwien.auto.calimero.dptxlator.DPTXlatorString;
 import tuwien.auto.calimero.dptxlator.TranslatorTypes;
-import tuwien.auto.calimero.exception.KNXException;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.exception.KNXIllegalStateException;
-import tuwien.auto.calimero.exception.KNXInvalidResponseException;
-import tuwien.auto.calimero.exception.KNXRemoteException;
-import tuwien.auto.calimero.exception.KNXTimeoutException;
 import tuwien.auto.calimero.internal.EventListeners;
 import tuwien.auto.calimero.link.KNXLinkClosedException;
 import tuwien.auto.calimero.link.KNXNetworkLink;
 import tuwien.auto.calimero.link.NetworkLinkListener;
-import tuwien.auto.calimero.log.LogLevel;
-import tuwien.auto.calimero.log.LogManager;
 import tuwien.auto.calimero.log.LogService;
 
 /**
@@ -84,9 +86,7 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 {
 	private final class NLListener implements NetworkLinkListener
 	{
-		NLListener()
-		{}
-
+		@Override
 		public void indication(final FrameEvent e)
 		{
 			final CEMILData f = (CEMILData) e.getFrame();
@@ -97,10 +97,10 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 			final int svc = DataUnitBuilder.getAPDUService(apdu);
 			// Note: even if this is a read response we have waited for,
 			// we nevertheless notify the listeners about it (we do *not* discard it)
-			if (svc == GROUP_RESPONSE && wait) {
+			if (svc == GROUP_RESPONSE) {
 				synchronized (indications) {
-					indications.add(e);
-					indications.notify();
+					if (indications.replace((GroupAddress) f.getDestination(), e) != null)
+						indications.notifyAll();
 				}
 			}
 			try {
@@ -111,36 +111,29 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 					fireGroupReadWrite(f, DataUnitBuilder.extractASDU(apdu), svc, apdu.length <= 2);
 			}
 			catch (final RuntimeException rte) {
-				logger.error("on group indication", rte);
+				logger.error("on group indication from {}", f.getDestination(), rte);
 			}
 		}
 
-		private void fireGroupReadWrite(final CEMILData f, final byte[] asdu, final int svc,
-			final boolean optimized)
+		private void fireGroupReadWrite(final CEMILData f, final byte[] asdu, final int svc, final boolean optimized)
 		{
 			final ProcessEvent e = new ProcessEvent(ProcessCommunicatorImpl.this, f.getSource(),
 					(GroupAddress) f.getDestination(), svc, asdu, optimized);
-			final EventListener[] el = listeners.listeners();
-			for (int i = 0; i < el.length; i++) {
-				final EventListener l = el[i];
-				try {
-					if (svc == GROUP_READ && l instanceof ProcessListenerEx)
-						((ProcessListenerEx) l).groupReadRequest(e);
-					else if (svc == GROUP_RESPONSE && l instanceof ProcessListenerEx)
-						((ProcessListenerEx) l).groupReadResponse(e);
-					else
-						((ProcessListener) l).groupWrite(e);
-				}
-				catch (final RuntimeException rte) {
-					removeProcessListener((ProcessListener) l);
-					logger.error("removed event listener", rte);
-				}
-			}
+			final Consumer<? super ProcessListener> c;
+			if (svc == GROUP_READ)
+				c = l -> l.groupReadRequest(e);
+			else if (svc == GROUP_RESPONSE)
+				c = l -> l.groupReadResponse(e);
+			else
+				c = l -> l.groupWrite(e);
+			listeners.fire(c);
 		}
 
+		@Override
 		public void confirmation(final FrameEvent e)
 		{}
 
+		@Override
 		public void linkClosed(final CloseEvent e)
 		{
 			logger.info("attached link was closed");
@@ -154,14 +147,17 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 
 	private final KNXNetworkLink lnk;
 	private final NetworkLinkListener lnkListener = new NLListener();
-	private final EventListeners listeners;
-	private final List indications = new LinkedList();
+	private final EventListeners<ProcessListener> listeners;
+
+	private final Map<GroupAddress, FrameEvent> indications = new HashMap<>();
+	private static final FrameEvent NoResponse = new FrameEvent(ProcessCommunicatorImpl.class, (CEMI) null);
+	private final Map<GroupAddress, AtomicInteger> readers = new HashMap<>();
+
 	private volatile Priority priority = Priority.LOW;
 	// maximum wait time in seconds for a response message
 	private volatile int responseTimeout = 10;
-	private volatile boolean wait;
 	private volatile boolean detached;
-	private final LogService logger;
+	private final Logger logger;
 
 	/**
 	 * Creates a new process communicator attached to the supplied KNX network link.
@@ -177,15 +173,16 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 		if (!link.isOpen())
 			throw new KNXLinkClosedException(
 					"cannot initialize process communication using closed link " + link.getName());
-		logger = LogManager.getManager().getLogService("process " + link.getName());
+		logger = LogService.getLogger("calimero.process.process " + link.getName());
 		lnk = link;
-		listeners = new EventListeners(logger);
+		listeners = new EventListeners<>(logger);
 		lnk.addLinkListener(lnkListener);
 	}
 
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.process.ProcessCommunicator#setResponseTimeout(int)
 	 */
+	@Override
 	public void setResponseTimeout(final int timeout)
 	{
 		if (timeout <= 0)
@@ -196,6 +193,7 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.process.ProcessCommunicator#getResponseTimeout()
 	 */
+	@Override
 	public int getResponseTimeout()
 	{
 		return responseTimeout;
@@ -205,6 +203,7 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 	 * @see tuwien.auto.calimero.process.ProcessCommunicator#setPriority
 	 * (tuwien.auto.calimero.Priority)
 	 */
+	@Override
 	public void setPriority(final Priority p)
 	{
 		priority = p;
@@ -213,6 +212,7 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.process.ProcessCommunicator#getPriority()
 	 */
+	@Override
 	public Priority getPriority()
 	{
 		return priority;
@@ -222,6 +222,7 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 	 * @see tuwien.auto.calimero.process.ProcessCommunicator#addProcessListener
 	 * (tuwien.auto.calimero.process.ProcessListener)
 	 */
+	@Override
 	public void addProcessListener(final ProcessListener l)
 	{
 		listeners.add(l);
@@ -231,6 +232,7 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 	 * @see tuwien.auto.calimero.process.ProcessCommunicator#removeProcessListener
 	 * (tuwien.auto.calimero.process.ProcessListener)
 	 */
+	@Override
 	public void removeProcessListener(final ProcessListener l)
 	{
 		listeners.remove(l);
@@ -240,8 +242,9 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 	 * @see tuwien.auto.calimero.process.ProcessCommunicator#readBool
 	 * (tuwien.auto.calimero.GroupAddress)
 	 */
-	public boolean readBool(final GroupAddress dst) throws KNXTimeoutException,
-		KNXRemoteException, KNXLinkClosedException, KNXFormatException, InterruptedException
+	@Override
+	public boolean readBool(final GroupAddress dst) throws KNXTimeoutException, KNXRemoteException,
+		KNXLinkClosedException, KNXFormatException, InterruptedException
 	{
 		final byte[] apdu = readFromGroup(dst, priority, 0, 0);
 		final DPTXlatorBoolean t = new DPTXlatorBoolean(DPTXlatorBoolean.DPT_BOOL);
@@ -253,8 +256,9 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 	 * @see tuwien.auto.calimero.process.ProcessCommunicator#write
 	 * (tuwien.auto.calimero.GroupAddress, boolean)
 	 */
-	public void write(final GroupAddress dst, final boolean value) throws KNXTimeoutException,
-		KNXLinkClosedException
+	@Override
+	public void write(final GroupAddress dst, final boolean value)
+		throws KNXTimeoutException, KNXLinkClosedException
 	{
 		try {
 			final DPTXlatorBoolean t = new DPTXlatorBoolean(DPTXlatorBoolean.DPT_BOOL);
@@ -268,6 +272,7 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 	 * @see tuwien.auto.calimero.process.ProcessCommunicator#readUnsigned
 	 * (tuwien.auto.calimero.GroupAddress, java.lang.String)
 	 */
+	@Override
 	public int readUnsigned(final GroupAddress dst, final String scale) throws KNXTimeoutException,
 		KNXRemoteException, KNXLinkClosedException, KNXFormatException, InterruptedException
 	{
@@ -281,6 +286,7 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 	 * @see tuwien.auto.calimero.process.ProcessCommunicator#write
 	 * (tuwien.auto.calimero.GroupAddress, int, java.lang.String)
 	 */
+	@Override
 	public void write(final GroupAddress dst, final int value, final String scale)
 		throws KNXTimeoutException, KNXFormatException, KNXLinkClosedException
 	{
@@ -293,8 +299,9 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 	 * @see tuwien.auto.calimero.process.ProcessCommunicator#readControl
 	 * (tuwien.auto.calimero.GroupAddress)
 	 */
-	public int readControl(final GroupAddress dst) throws KNXTimeoutException,
-		KNXRemoteException, KNXLinkClosedException, KNXFormatException, InterruptedException
+	@Override
+	public int readControl(final GroupAddress dst) throws KNXTimeoutException, KNXRemoteException,
+		KNXLinkClosedException, KNXFormatException, InterruptedException
 	{
 		final byte[] apdu = readFromGroup(dst, priority, 0, 0);
 		final DPTXlator3BitControlled t = new DPTXlator3BitControlled(
@@ -307,6 +314,7 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 	 * @see tuwien.auto.calimero.process.ProcessCommunicator#write
 	 * (tuwien.auto.calimero.GroupAddress, boolean, byte)
 	 */
+	@Override
 	public void write(final GroupAddress dst, final boolean control, final int stepcode)
 		throws KNXTimeoutException, KNXFormatException, KNXLinkClosedException
 	{
@@ -316,32 +324,11 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 		write(dst, priority, t);
 	}
 
-	/**
-	 * @deprecated Use {@link #readFloat(GroupAddress, boolean)}.
-	 */
-	public float readFloat(final GroupAddress dst) throws KNXTimeoutException,
-		KNXRemoteException, KNXLinkClosedException, KNXFormatException, InterruptedException
-	{
-		logger.warn("ProcessCommunicator::read(GroupAddress) is deprecated. " +
-				"Use ProcessCommunicator::read(GroupAddress, boolean).");
-		return readFloat(dst, false);
-	}
-
-	/**
-	 * @deprecated Use {@link #write(GroupAddress, float, boolean)}.
-	 */
-	public void write(final GroupAddress dst, final float value) throws KNXTimeoutException,
-		KNXFormatException, KNXLinkClosedException
-	{
-		logger.warn("ProcessCommunicator::write(GroupAddress, float) is deprecated. " +
-				"Use ProcessCommunicator::write(GroupAddress, float, boolean).");
-		write(dst, value, false);
-	}
-
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.process.ProcessCommunicationBase#write
 	 * (tuwien.auto.calimero.GroupAddress, float, boolean)
 	 */
+	@Override
 	public void write(final GroupAddress dst, final float value, final boolean use4ByteFloat)
 		throws KNXTimeoutException, KNXFormatException, KNXLinkClosedException
 	{
@@ -363,25 +350,27 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 	 * @see tuwien.auto.calimero.process.ProcessCommunicator#readFloat
 	 * (tuwien.auto.calimero.GroupAddress, boolean)
 	 */
-	public float readFloat(final GroupAddress dst, final boolean is4ByteFloat)
+	@Override
+	public double readFloat(final GroupAddress dst, final boolean is4ByteFloat)
 		throws KNXTimeoutException, KNXRemoteException, KNXLinkClosedException, KNXFormatException,
 		InterruptedException
 	{
-		final DPTXlator t = is4ByteFloat ? (DPTXlator) new DPTXlator4ByteFloat(
-				DPTXlator4ByteFloat.DPT_TEMPERATURE_DIFFERENCE) : new DPTXlator2ByteFloat(
-				DPTXlator2ByteFloat.DPT_RAIN_AMOUNT);
+		final DPTXlator t = is4ByteFloat
+				? new DPTXlator4ByteFloat(DPTXlator4ByteFloat.DPT_TEMPERATURE_DIFFERENCE)
+				: new DPTXlator2ByteFloat(DPTXlator2ByteFloat.DPT_RAIN_AMOUNT);
 		final int size = is4ByteFloat ? 4 : 2;
 		final byte[] apdu = readFromGroup(dst, priority, size, size);
 		extractGroupASDU(apdu, t);
-		return (float) t.getNumericValue();
+		return t.getNumericValue();
 	}
 
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.process.ProcessCommunicator#readString
 	 * (tuwien.auto.calimero.GroupAddress)
 	 */
-	public String readString(final GroupAddress dst) throws KNXTimeoutException,
-		KNXRemoteException, KNXLinkClosedException, KNXFormatException, InterruptedException
+	@Override
+	public String readString(final GroupAddress dst) throws KNXTimeoutException, KNXRemoteException,
+		KNXLinkClosedException, KNXFormatException, InterruptedException
 	{
 		final byte[] apdu = readFromGroup(dst, priority, 0, 14);
 		final DPTXlatorString t = new DPTXlatorString(DPTXlatorString.DPT_STRING_8859_1);
@@ -393,8 +382,9 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 	 * @see tuwien.auto.calimero.process.ProcessCommunicator#write
 	 * (tuwien.auto.calimero.GroupAddress, java.lang.String)
 	 */
-	public void write(final GroupAddress dst, final String value) throws KNXTimeoutException,
-		KNXFormatException, KNXLinkClosedException
+	@Override
+	public void write(final GroupAddress dst, final String value)
+		throws KNXTimeoutException, KNXFormatException, KNXLinkClosedException
 	{
 		final DPTXlatorString t = new DPTXlatorString(DPTXlatorString.DPT_STRING_8859_1);
 		t.setValue(value);
@@ -405,6 +395,7 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 	 * @see tuwien.auto.calimero.process.ProcessCommunicator#write
 	 * (tuwien.auto.calimero.GroupAddress, tuwien.auto.calimero.dptxlator.DPTXlator)
 	 */
+	@Override
 	public void write(final GroupAddress dst, final DPTXlator value)
 		throws KNXTimeoutException, KNXLinkClosedException
 	{
@@ -417,6 +408,7 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 	 * If <code>dp</code> has no {@link DPT} set, this method returns a hexadecimal representation
 	 * of the ASDU.
 	 */
+	@Override
 	public String read(final Datapoint dp) throws KNXException, InterruptedException
 	{
 		final byte[] apdu = readFromGroup(dp.getMainAddress(), dp.getPriority(), 0, 14);
@@ -431,6 +423,7 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 	 * @see tuwien.auto.calimero.process.ProcessCommunicator#write
 	 * (tuwien.auto.calimero.datapoint.Datapoint, java.lang.String)
 	 */
+	@Override
 	public void write(final Datapoint dp, final String value) throws KNXException
 	{
 		final DPTXlator t = TranslatorTypes.createTranslator(dp.getMainNumber(), dp.getDPT());
@@ -441,6 +434,7 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.process.ProcessCommunicator#detach()
 	 */
+	@Override
 	public KNXNetworkLink detach()
 	{
 		// if we synchronize on method we would take into account
@@ -454,7 +448,6 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 		lnk.removeLinkListener(lnkListener);
 		fireDetached();
 		logger.info("detached from " + lnk.getName());
-		LogManager.getManager().removeLogService(logger.getName());
 		return lnk;
 	}
 
@@ -464,32 +457,32 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 		if (detached)
 			throw new KNXIllegalStateException("process communicator detached");
 		lnk.sendRequestWait(dst, p, createGroupAPDU(GROUP_WRITE, t));
-		if (logger.isLoggable(LogLevel.TRACE))
+		if (logger.isTraceEnabled())
 			logger.trace("group write to " + dst + " succeeded");
 	}
 
-	private synchronized byte[] readFromGroup(final GroupAddress dst, final Priority p,
+	private byte[] readFromGroup(final GroupAddress dst, final Priority p,
 		final int minASDULen, final int maxASDULen) throws KNXTimeoutException,
 			KNXInvalidResponseException, KNXLinkClosedException, InterruptedException
 	{
 		if (detached)
 			throw new KNXIllegalStateException("process communicator detached");
 		try {
-			wait = true;
-
-			// before sending a request and waiting for response, clear previous indications
-			// that could be sitting there from previous timed-out commands or by another request
-			// for the same group
 			synchronized (indications) {
-				indications.clear();
+				readers.computeIfAbsent(dst, v -> new AtomicInteger()).incrementAndGet();
+				indications.putIfAbsent(dst, NoResponse);
 			}
+
 			lnk.sendRequestWait(dst, p, DataUnitBuilder.createLengthOptimizedAPDU(GROUP_READ, null));
-			if (logger.isLoggable(LogLevel.TRACE))
-				logger.trace("sent group read request to " + dst);
+			logger.trace("sent group read request to {}", dst);
 			return waitForResponse(dst, minASDULen + 2, maxASDULen + 2);
 		}
 		finally {
-			wait = false;
+			synchronized (indications) {
+				final boolean none = readers.get(dst).decrementAndGet() == 0;
+				readers.compute(dst, (k, v) -> none ? null : v);
+				indications.compute(dst, (k, v) -> none ? null : v);
+			}
 		}
 	}
 
@@ -500,49 +493,32 @@ public class ProcessCommunicatorImpl implements ProcessCommunicator
 		final long end = System.currentTimeMillis() + remaining;
 		synchronized (indications) {
 			while (remaining > 0) {
-				// although we can rely that we process any correctly received
-				// response in indications, there might be
-				// - more than one response for a single read from the
-				//   (mis-)configured network
-				// - a shared KNX network link among several process communicators,
-				//   and therefore several group responses forwarded to each
-				while (indications.size() > 0) {
-					final FrameEvent e = (FrameEvent) indications.remove(0);
-					if (((CEMILData) e.getFrame()).getDestination().equals(from)) {
-						final byte[] d = e.getFrame().getPayload();
-						indications.clear();
-						// ok, got response we're waiting for
-						if (d.length >= minAPDU && d.length <= maxAPDU)
-							return d;
-
-						final String s = "APDU response length " + d.length + " bytes, expected "
-								+ minAPDU + " to " + maxAPDU;
-						logger.error("received group read response with " + s);
-						throw new KNXInvalidResponseException(s);
-					}
+				final FrameEvent e = indications.get(from);
+				if (e == NoResponse) {
+					indications.wait(remaining);
+					remaining = end - System.currentTimeMillis();
 				}
-				indications.wait(remaining);
-				remaining = end - System.currentTimeMillis();
+				else {
+					final byte[] d = e.getFrame().getPayload();
+					final int len = d.length;
+					// validate length of response we're waiting for
+					if (len >= minAPDU && len <= maxAPDU)
+						return d;
+
+					final String s = "APDU response length " + len + " bytes, expected " + minAPDU + " to " + maxAPDU;
+					logger.error("received group read response from {} with {}", from, s);
+					throw new KNXInvalidResponseException(s);
+				}
 			}
 		}
-		logger.info("timeout waiting for group read response");
-		throw new KNXTimeoutException("timeout waiting for group read response");
+		logger.info("timeout waiting for group read response from {}", from);
+		throw new KNXTimeoutException("timeout waiting for group read response from " + from);
 	}
 
 	private void fireDetached()
 	{
 		final DetachEvent e = new DetachEvent(this);
-		final EventListener[] el = listeners.listeners();
-		for (int i = 0; i < el.length; i++) {
-			final ProcessListener l = (ProcessListener) el[i];
-			try {
-				l.detached(e);
-			}
-			catch (final RuntimeException rte) {
-				removeProcessListener(l);
-				logger.error("removed event listener", rte);
-			}
-		}
+		listeners.fire(l -> l.detached(e));
 	}
 
 	// createGroupAPDU and extractGroupASDU helper would actually better fit

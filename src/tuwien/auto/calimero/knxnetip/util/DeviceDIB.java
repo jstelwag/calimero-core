@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2015 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -44,8 +44,8 @@ import java.util.Arrays;
 
 import tuwien.auto.calimero.DataUnitBuilder;
 import tuwien.auto.calimero.IndividualAddress;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 
 /**
  * Represents a device description information block. Objects of this type are immutable.
@@ -64,12 +64,6 @@ public class DeviceDIB extends DIB
 	 * KNX medium code for power line 110 kHz (1200 bit/s).
 	 */
 	public static final int MEDIUM_PL110 = 0x04;
-
-	/**
-	 * @deprecated Phased out in the KNX specification, not used any longer. (KNX medium code for
-	 *             power line 132 kHz (2400 bit/s), inherited from EHS.)
-	 */
-	public static final int MEDIUM_PL132 = 0x08;
 
 	/**
 	 * KNX medium code for radio frequency (868 MHz).
@@ -95,7 +89,6 @@ public class DeviceDIB extends DIB
 
 	/**
 	 * Creates a device DIB out of a byte array.
-	 * <p>
 	 *
 	 * @param data byte array containing device DIB structure
 	 * @param offset start offset of DIB in <code>data</code>
@@ -108,8 +101,7 @@ public class DeviceDIB extends DIB
 			throw new KNXFormatException("DIB is not of type device info", type);
 		if (size < DIB_SIZE)
 			throw new KNXFormatException("device info DIB too short", size);
-		final ByteArrayInputStream is = new ByteArrayInputStream(data, offset + 2, data.length
-				- offset - 2);
+		final ByteArrayInputStream is = new ByteArrayInputStream(data, offset + 2, data.length - offset - 2);
 		knxmedium = is.read();
 		status = is.read();
 		address = new IndividualAddress(
@@ -129,10 +121,9 @@ public class DeviceDIB extends DIB
 
 	/**
 	 * Creates a device information DIB using the supplied device information.
-	 * <p>
 	 *
-	 * @param friendlyName user friendly name to identify the device; a ISO 8859-1 string
-	 *        with a maximum length of 29 characters
+	 * @param friendlyName user friendly name to identify the device; a ISO 8859-1 string with a maximum length of 29
+	 *        characters
 	 * @param deviceStatus current device status, <code>0 &le; deviceStatus &le; 0xff</code>
 	 *        <ul>
 	 *        <li>bit 0 is the programming mode:<br>
@@ -140,17 +131,15 @@ public class DeviceDIB extends DIB
 	 *        0 = device is not in programming mode</li>
 	 *        <li>all other bits are reserved</li>
 	 *        </ul>
-	 * @param projectInstallationId project-installation identifier of this device;
-	 *        uniquely identifies a device in a project with more than one installation.
-	 *        The lower 4 bits specify the installation number, bits 4 to 15 (MSB) contain
-	 *        the project number.
-	 * @param knxMedium KNX medium, one of the predefined KNX medium code constants of
-	 *        this class
+	 * @param projectInstallationId project-installation identifier of this device; uniquely identifies a device in a
+	 *        project with more than one installation. The lower 4 bits specify the installation number, bits 4 to 15
+	 *        (MSB) contain the project number.
+	 * @param knxMedium KNX medium, one of the predefined KNX medium code constants of this class
 	 * @param knxAddress KNX individual address
 	 * @param serialNumber KNX serial number of the device, used to identify the device,
 	 *        <code>serialNumber.length == 6</code>
-	 * @param routingMulticast KNXnet/IP routing multicast address for a routing device,
-	 *        <code>null</code> 0.0.0.0 if the device does not support routing
+	 * @param routingMulticast KNXnet/IP routing multicast address for a routing device, <code>null</code> 0.0.0.0 if
+	 *        the device does not support routing
 	 * @param macAddress device Ethernet MAC address, <code>macAddress.length == 6</code>
 	 */
 	public DeviceDIB(final String friendlyName, final int deviceStatus,
@@ -177,14 +166,12 @@ public class DeviceDIB extends DIB
 			CRBase.logger.warn("device DIB \"" + friendlyName + "\": device status (" + status
 					+ ") uses reserved bits");
 
-		if (knxMedium != MEDIUM_TP1 && knxMedium != MEDIUM_PL110 && knxMedium != MEDIUM_PL132
-				&& knxMedium != MEDIUM_RF && knxMedium != MEDIUM_KNXIP)
+		if (knxMedium != MEDIUM_TP1 && knxMedium != MEDIUM_PL110 && knxMedium != MEDIUM_RF && knxMedium != MEDIUM_KNXIP)
 			throw new KNXIllegalArgumentException("KNX medium not supported");
 		knxmedium = knxMedium;
 
 		if (serialNumber.length != serial.length)
-			throw new KNXIllegalArgumentException("serial number length not equal to "
-					+ serial.length + " bytes");
+			throw new KNXIllegalArgumentException("serial number length not equal to " + serial.length + " bytes");
 		for (int i = 0; i < serial.length; i++)
 			serial[i] = serialNumber[i];
 
@@ -197,21 +184,18 @@ public class DeviceDIB extends DIB
 		final byte[] empty = new byte[] { 0, 0, 0, 0 };
 		final byte[] rmc = routingMulticast == null ? empty : routingMulticast.getAddress();
 		if (!Arrays.equals(rmc, empty) && !routingMulticast.isMulticastAddress())
-			throw new KNXIllegalArgumentException(routingMulticast.toString()
-					+ " is not a multicast address");
+			throw new KNXIllegalArgumentException(routingMulticast.toString() + " is not a multicast address");
 		for (int i = 0; i < mcast.length; i++)
 			mcast[i] = rmc[i];
 
 		if (macAddress.length != mac.length)
-			throw new KNXIllegalArgumentException("MAC address length not equal to " + mac.length
-					+ " bytes");
+			throw new KNXIllegalArgumentException("MAC address length not equal to " + mac.length + " bytes");
 		for (int i = 0; i < mac.length; i++)
 			mac[i] = macAddress[i];
 	}
 
 	/**
 	 * Returns the device individual address.
-	 * <p>
 	 *
 	 * @return individual address as {@link IndividualAddress}
 	 */
@@ -221,10 +205,8 @@ public class DeviceDIB extends DIB
 	}
 
 	/**
-	 * Returns the device status byte.
-	 * <p>
-	 * Bit 0 is programming mode flag: 1 = device is in programming mode, 0 = device is
-	 * not in programming mode.
+	 * Returns the device status byte. Bit 0 is the programming mode flag: 1 = device is in programming mode, 0 = device
+	 * is not in programming mode.
 	 *
 	 * @return status as unsigned byte
 	 */
@@ -235,7 +217,6 @@ public class DeviceDIB extends DIB
 
 	/**
 	 * Returns the KNX medium code.
-	 * <p>
 	 *
 	 * @return KNX medium as unsigned byte
 	 */
@@ -246,7 +227,6 @@ public class DeviceDIB extends DIB
 
 	/**
 	 * Returns a textual representation of the KNX medium code.
-	 * <p>
 	 *
 	 * @return KNX medium as string format
 	 * @see #getKNXMedium()
@@ -258,8 +238,6 @@ public class DeviceDIB extends DIB
 			return "TP1";
 		case MEDIUM_PL110:
 			return "PL110";
-		case MEDIUM_PL132:
-			return "PL132";
 		case MEDIUM_RF:
 			return "RF";
 		case MEDIUM_KNXIP:
@@ -271,18 +249,16 @@ public class DeviceDIB extends DIB
 
 	/**
 	 * Returns the device Ethernet MAC address.
-	 * <p>
 	 *
 	 * @return byte array containing MAC address
 	 */
 	public final byte[] getMACAddress()
 	{
-		return (byte[]) mac.clone();
+		return mac.clone();
 	}
 
 	/**
 	 * Returns a textual representation of the device Ethernet MAC address.
-	 * <p>
 	 *
 	 * @return MAC address as string format
 	 */
@@ -292,15 +268,14 @@ public class DeviceDIB extends DIB
 	}
 
 	/**
-	 * Returns the device routing multicast address.
-	 * <p>
-	 * For devices which don't implement routing, the multicast address is 0.
+	 * Returns the device routing multicast address; for devices which don't implement routing, the multicast address is
+	 * 0.
 	 *
 	 * @return multicast address as byte array
 	 */
 	public final byte[] getMulticastAddress()
 	{
-		return (byte[]) mcast.clone();
+		return mcast.clone();
 	}
 
 	/**
@@ -344,20 +319,17 @@ public class DeviceDIB extends DIB
 	}
 
 	/**
-	 * Returns the KNX serial number of the device.
-	 * <p>
-	 * The serial number uniquely identifies a device.
+	 * Returns the KNX serial number of the device, which uniquely identifies a device.
 	 *
 	 * @return byte array with serial number
 	 */
 	public final byte[] getSerialNumber()
 	{
-		return (byte[]) serial.clone();
+		return serial.clone();
 	}
 
 	/**
 	 * Returns a textual representation of the device KNX serial number.
-	 * <p>
 	 *
 	 * @return serial number as string
 	 */
@@ -381,10 +353,10 @@ public class DeviceDIB extends DIB
 
 	/**
 	 * Returns a textual representation of this device DIB.
-	 * <p>
 	 *
 	 * @return a string representation of the object
 	 */
+	@Override
 	public String toString()
 	{
 		InetAddress mc = null;
@@ -394,14 +366,35 @@ public class DeviceDIB extends DIB
 		catch (final UnknownHostException ignore) {}
 		return "\"" + name + "\", KNX address " + address + ", KNX medium " + getKNXMediumString()
 				+ ", installation " + getInstallation() + " - project " + getProject()
-				+ " (project/installation ID " + installationId + ")"
+				+ " (ID " + installationId + ")"
 				+ ", routing multicast address " + mc + ", MAC address " + getMACAddressString()
 				+ ", S/N 0x" + getSerialNumberString();
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.knxnetip.util.DIB#toByteArray()
-	 */
+	@Override
+	public boolean equals(final Object obj)
+	{
+		if (this == obj)
+			return true;
+		if (!(obj instanceof DeviceDIB))
+			return false;
+		final DeviceDIB other = (DeviceDIB) obj;
+		return address.equals(other.address) && name.equals(other.name) && status == other.status
+				&& knxmedium == other.knxmedium
+				&& Arrays.hashCode(serial) == Arrays.hashCode(other.serial)
+				&& installationId == other.installationId
+				&& Arrays.hashCode(mcast) == Arrays.hashCode(other.mcast)
+				&& Arrays.hashCode(mac) == Arrays.hashCode(other.mac);
+	}
+
+	@Override
+	public int hashCode()
+	{
+		return status + knxmedium + installationId + address.hashCode() + name.hashCode()
+				+ Arrays.hashCode(serial) + Arrays.hashCode(mcast) + Arrays.hashCode(mac);
+	}
+
+	@Override
 	public byte[] toByteArray()
 	{
 		final byte[] buf = super.toByteArray();

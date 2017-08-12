@@ -36,7 +36,7 @@
 
 package tuwien.auto.calimero.knxnetip.util;
 
-import tuwien.auto.calimero.exception.KNXFormatException;
+import tuwien.auto.calimero.KNXFormatException;
 
 /**
  * Description Information Block (DIB).
@@ -54,19 +54,16 @@ public abstract class DIB
 {
 	/**
 	 * Description type code for device information e.g. KNX medium.
-	 * <p>
 	 */
 	public static final int DEVICE_INFO = 0x01;
 
 	/**
 	 * Description type code for further data defined by device manufacturer.
-	 * <p>
 	 */
 	public static final int MFR_DATA = 0xFE;
 
 	/**
 	 * Description type code for service families supported by the device.
-	 * <p>
 	 */
 	public static final int SUPP_SVC_FAMILIES = 0x02;
 
@@ -110,7 +107,7 @@ public abstract class DIB
 	 * Creates a new DIB and initializes basic fields.
 	 * <p>
 	 *
-	 * @param dibSize total size of DIB in bytes, <code>dibSize > 0</code>
+	 * @param dibSize total size of DIB in bytes, <code>dibSize &gt; 0</code>
 	 * @param descriptionType one of the description type code constants of this class
 	 */
 	protected DIB(final int dibSize, final int descriptionType)

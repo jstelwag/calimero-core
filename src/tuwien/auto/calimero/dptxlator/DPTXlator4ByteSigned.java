@@ -40,7 +40,7 @@ import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Map;
 
-import tuwien.auto.calimero.exception.KNXFormatException;
+import tuwien.auto.calimero.KNXFormatException;
 
 /**
  * Translator for KNX DPTs with main number 13, type <b>4 byte signed value</b>.
@@ -66,11 +66,11 @@ public class DPTXlator4ByteSigned extends DPTXlator
 			"2147483647", "counter pulses");
 
 	/**
-	 * DPT ID 13.002, Flow rate in m³/h with high resolution; values from <b>-2147483648</b> to
-	 * <b>2147483647</b>, resolution 0.0001 m³/h.
+	 * DPT ID 13.002, Flow rate in m3/h with high resolution; values from <b>-2147483648</b> to
+	 * <b>2147483647</b>, resolution 0.0001 m3/h.
 	 */
 	public static final DPT DPT_FLOWRATE = new DPT("13.002", "Flow rate", "-2147483648",
-			"2147483647", "m³/h");
+			"2147483647", "m3/h");
 
 	/**
 	 * DPT ID 13.010, Active energy in watthours; values from <b>-2147483648</b> to
@@ -118,10 +118,10 @@ public class DPTXlator4ByteSigned extends DPTXlator
 	public static final DPT DPT_DELTA_TIME = new DPT("13.100", "Delta time in seconds",
 			"-2147483648", "2147483647", "s");
 
-	private static final Map types;
+	private static final Map<String, DPT> types;
 
 	static {
-		types = new HashMap(15);
+		types = new HashMap<>(15);
 		final Field[] fields = DPTXlator4ByteSigned.class.getFields();
 		for (int i = 0; i < fields.length; i++) {
 			try {
@@ -190,6 +190,7 @@ public class DPTXlator4ByteSigned extends DPTXlator
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getNumericValue()
 	 * @see #getValueSigned()
 	 */
+	@Override
 	public final double getNumericValue()
 	{
 		return getValueSigned();
@@ -198,6 +199,7 @@ public class DPTXlator4ByteSigned extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getValue()
 	 */
+	@Override
 	public String getValue()
 	{
 		return makeString(0);
@@ -206,6 +208,7 @@ public class DPTXlator4ByteSigned extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getAllValues()
 	 */
+	@Override
 	public String[] getAllValues()
 	{
 		final String[] s = new String[data.length / 4];
@@ -217,7 +220,8 @@ public class DPTXlator4ByteSigned extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getSubTypes()
 	 */
-	public final Map getSubTypes()
+	@Override
+	public final Map<String, DPT> getSubTypes()
 	{
 		return types;
 	}
@@ -226,7 +230,7 @@ public class DPTXlator4ByteSigned extends DPTXlator
 	 * @return the subtypes of the 4-byte unsigned translator type
 	 * @see DPTXlator#getSubTypesStatic()
 	 */
-	protected static Map getSubTypesStatic()
+	protected static Map<String, DPT> getSubTypesStatic()
 	{
 		return types;
 	}
@@ -242,6 +246,7 @@ public class DPTXlator4ByteSigned extends DPTXlator
 		return appendUnit(Integer.toString(fromDPT(index)));
 	}
 
+	@Override
 	protected void toDPT(final String value, final short[] dst, final int index)
 		throws KNXFormatException
 	{

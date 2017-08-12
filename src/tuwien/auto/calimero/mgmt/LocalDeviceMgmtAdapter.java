@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2015 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -40,9 +40,9 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 
+import tuwien.auto.calimero.KNXException;
+import tuwien.auto.calimero.KNXTimeoutException;
 import tuwien.auto.calimero.cemi.CEMIDevMgmt;
-import tuwien.auto.calimero.exception.KNXException;
-import tuwien.auto.calimero.exception.KNXTimeoutException;
 import tuwien.auto.calimero.knxnetip.KNXConnectionClosedException;
 import tuwien.auto.calimero.knxnetip.KNXnetIPConnection;
 import tuwien.auto.calimero.knxnetip.KNXnetIPConnection.BlockingMode;
@@ -92,7 +92,7 @@ public class LocalDeviceMgmtAdapter extends LocalDeviceManagement
 		InterruptedException
 	{
 		super(create(localEP, serverCtrlEP, useNat), l, queryWriteEnable);
-		conn = c;
+		conn = (KNXnetIPConnection) c;
 		conn.addConnectionListener(new KNXListenerImpl());
 		init();
 	}
@@ -101,13 +101,15 @@ public class LocalDeviceMgmtAdapter extends LocalDeviceManagement
 	 * {@inheritDoc} The name for this adapter starts with "Local-DM " + KNXnet/IP server control
 	 * endpoint, allowing easier distinction of adapter types.
 	 */
+	@Override
 	public String getName()
 	{
 		return "Local-DM " + conn.getRemoteAddress();
 	}
 
-	protected void send(final CEMIDevMgmt frame, final Object mode) throws KNXTimeoutException,
-		KNXConnectionClosedException
+	@Override
+	protected void send(final CEMIDevMgmt frame, final Object mode)
+		throws KNXTimeoutException, KNXConnectionClosedException, InterruptedException
 	{
 		conn.send(frame, (BlockingMode) mode);
 	}

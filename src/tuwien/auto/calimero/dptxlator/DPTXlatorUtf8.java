@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2015 B. Malinowsky
+    Copyright (c) 2015, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -40,8 +40,8 @@ import java.io.UnsupportedEncodingException;
 import java.util.HashMap;
 import java.util.Map;
 
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 
 /**
  * Translator for KNX DPTs with main number 28, type <b>Unicode UTF-8 string</b>.
@@ -75,14 +75,14 @@ public class DPTXlatorUtf8 extends DPTXlator
 	 */
 	public static final DPT DPT_UTF8 = new DPT("28.001", "UTF-8", "", "");
 
-	private static final Map types;
+	private static final Map<String, DPT> types;
 
 	// enforce a maximum string length for sanity checks; this length is still insanely high
 	// compared to the strings used in practice in KNX networks
 	private static final int maxLength = 1024 * 1024;
 
 	static {
-		types = new HashMap(5);
+		types = new HashMap<>(5);
 		types.put(DPT_UTF8.getID(), DPT_UTF8);
 	}
 
@@ -117,6 +117,7 @@ public class DPTXlatorUtf8 extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#setValues(java.lang.String[])
 	 */
+	@Override
 	public void setValues(final String[] values) throws KNXFormatException
 	{
 		if (values.length == 0)
@@ -134,6 +135,7 @@ public class DPTXlatorUtf8 extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getAllValues()
 	 */
+	@Override
 	public String[] getAllValues()
 	{
 		final String[] buf = new String[getItems()];
@@ -145,6 +147,7 @@ public class DPTXlatorUtf8 extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#setValue(java.lang.String)
 	 */
+	@Override
 	public void setValue(final String value) throws KNXFormatException
 	{
 		setValues(new String[] { value });
@@ -153,6 +156,7 @@ public class DPTXlatorUtf8 extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#setData(byte[], int)
 	 */
+	@Override
 	public void setData(final byte[] data, final int offset)
 	{
 		if (offset < 0 || offset > data.length)
@@ -163,6 +167,7 @@ public class DPTXlatorUtf8 extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getItems()
 	 */
+	@Override
 	public int getItems()
 	{
 		return items;
@@ -171,7 +176,8 @@ public class DPTXlatorUtf8 extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getSubTypes()
 	 */
-	public final Map getSubTypes()
+	@Override
+	public final Map<String, DPT> getSubTypes()
 	{
 		return types;
 	}
@@ -180,7 +186,7 @@ public class DPTXlatorUtf8 extends DPTXlator
 	 * @return the subtypes of the string translator type
 	 * @see DPTXlator#getSubTypesStatic()
 	 */
-	protected static Map getSubTypesStatic()
+	protected static Map<String, DPT> getSubTypesStatic()
 	{
 		return types;
 	}
@@ -224,6 +230,7 @@ public class DPTXlatorUtf8 extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#toDPT(java.lang.String, short[], int)
 	 */
+	@Override
 	protected void toDPT(final String value, final short[] dst, final int index)
 		throws KNXFormatException
 	{

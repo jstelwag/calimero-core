@@ -1,0 +1,7 @@
+language: java
+jdk:
+  - oraclejdk8
+
+before_script:
+  - (gradle -p test/testnetwork-launcher run &)
+  - sleep 10

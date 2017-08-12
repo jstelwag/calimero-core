@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2014 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -39,11 +39,10 @@ package tuwien.auto.calimero.dptxlator;
 import java.util.Arrays;
 
 import junit.framework.TestCase;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 import tuwien.auto.calimero.Util;
 import tuwien.auto.calimero.dptxlator.DPTXlator3BitControlled.DPT3BitControlled;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.log.LogManager;
 
 /**
  * @author B. Malinowsky
@@ -90,27 +89,18 @@ public class DPTXlator3BitControlledTest extends TestCase
 	/* (non-Javadoc)
 	 * @see junit.framework.TestCase#setUp()
 	 */
+	@Override
 	protected void setUp() throws Exception
 	{
 		super.setUp();
-		LogManager.getManager().addWriter("DPTXlator", Util.getLogWriter());
+		Util.setupLogging("DPTXlator");
 		t7 = new DPTXlator3BitControlled(dim);
 		t8 = new DPTXlator3BitControlled(blind);
 	}
 
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#tearDown()
-	 */
-	protected void tearDown() throws Exception
-	{
-		Thread.sleep(100);
-		LogManager.getManager().removeWriter("DPTXlator", Util.getLogWriter());
-		super.tearDown();
-	}
-
 	/**
 	 * Test method for {@link DPTXlator3BitControlled#DPTXlator3BitControlled(DPT)}.
-	 * 
+	 *
 	 * @throws KNXFormatException
 	 */
 	public final void testDPTXlator3BitControlled() throws KNXFormatException
@@ -122,7 +112,7 @@ public class DPTXlator3BitControlledTest extends TestCase
 	/**
 	 * Test method for
 	 * {@link tuwien.auto.calimero.dptxlator.DPTXlator3BitControlled#setValues(java.lang.String[])}.
-	 * 
+	 *
 	 * @throws KNXFormatException
 	 */
 	public final void testSetValues() throws KNXFormatException
@@ -167,7 +157,7 @@ public class DPTXlator3BitControlledTest extends TestCase
 	 * Test method for
 	 * {@link tuwien.auto.calimero.dptxlator.DPTXlator3BitControlled#setValue
 	 * (java.lang.String)}.
-	 * 
+	 *
 	 * @throws KNXFormatException
 	 */
 	public final void testSetValueString() throws KNXFormatException
@@ -185,7 +175,7 @@ public class DPTXlator3BitControlledTest extends TestCase
 		assertEquals(s, t7.getValue());
 
 		t8.setValue(blindValueBr);
-		
+
 		// check tolerant whitespace behavior
 		t7.setValue(" " + dim.getUpperValue() + "    " + 7);
 		t7.setValue("\t" + dim.getUpperValue() + "\t" + 3 + "\t");
@@ -286,7 +276,7 @@ public class DPTXlator3BitControlledTest extends TestCase
 	/**
 	 * Test method for
 	 * {@link tuwien.auto.calimero.dptxlator.DPTXlator3BitControlled#getControlBit()}.
-	 * 
+	 *
 	 * @throws KNXFormatException
 	 */
 	public final void testGetControlBit() throws KNXFormatException
@@ -303,7 +293,7 @@ public class DPTXlator3BitControlledTest extends TestCase
 	/**
 	 * Test method for
 	 * {@link tuwien.auto.calimero.dptxlator.DPTXlator3BitControlled#setControlBit(boolean)}.
-	 * 
+	 *
 	 * @throws KNXFormatException
 	 */
 	public final void testSetControlBit() throws KNXFormatException
@@ -328,7 +318,7 @@ public class DPTXlator3BitControlledTest extends TestCase
 	/**
 	 * Test method for
 	 * {@link tuwien.auto.calimero.dptxlator.DPTXlator3BitControlled#getStepCode()}.
-	 * 
+	 *
 	 * @throws KNXFormatException
 	 */
 	public final void testGetStepCode() throws KNXFormatException
@@ -390,7 +380,7 @@ public class DPTXlator3BitControlledTest extends TestCase
 	/**
 	 * Test method for
 	 * {@link tuwien.auto.calimero.dptxlator.DPTXlator3BitControlled#setStepCode(int)}.
-	 * 
+	 *
 	 * @throws KNXFormatException
 	 */
 	public final void testSetStepCode() throws KNXFormatException
@@ -421,7 +411,7 @@ public class DPTXlator3BitControlledTest extends TestCase
 
 	/**
 	 * Test method for {@link tuwien.auto.calimero.dptxlator.DPTXlator#getValue()}.
-	 * 
+	 *
 	 * @throws KNXFormatException
 	 */
 	public final void testGetValue() throws KNXFormatException

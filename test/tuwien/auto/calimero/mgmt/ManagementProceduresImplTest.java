@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2011, 2015 B. Malinowsky
+    Copyright (c) 2011, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -36,21 +36,31 @@
 
 package tuwien.auto.calimero.mgmt;
 
-import junit.framework.TestCase;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import tag.KnxnetIP;
+import tag.Slow;
 import tuwien.auto.calimero.IndividualAddress;
+import tuwien.auto.calimero.KNXException;
+import tuwien.auto.calimero.KNXTimeoutException;
 import tuwien.auto.calimero.Util;
-import tuwien.auto.calimero.exception.KNXException;
-import tuwien.auto.calimero.exception.KNXTimeoutException;
 import tuwien.auto.calimero.link.KNXLinkClosedException;
 import tuwien.auto.calimero.link.KNXNetworkLink;
 import tuwien.auto.calimero.link.KNXNetworkLinkIP;
 import tuwien.auto.calimero.link.medium.TPSettings;
-import tuwien.auto.calimero.log.LogManager;
 
 /**
  * @author B. Malinowsky
  */
-public class ManagementProceduresImplTest extends TestCase
+@KnxnetIP
+public class ManagementProceduresImplTest
 {
 	private ManagementProcedures mp;
 	private KNXNetworkLink link;
@@ -58,59 +68,39 @@ public class ManagementProceduresImplTest extends TestCase
 	private final IndividualAddress deviceInProgMode = Util.getKnxDevice();
 	private IndividualAddress nonexist;
 
-	/**
-	 * @param name
-	 */
-	public ManagementProceduresImplTest(final String name)
+	@BeforeEach
+	void init() throws Exception
 	{
-		super(name);
-	}
-
-	/*
-	 * (non-Javadoc)
-	 * @see junit.framework.TestCase#setUp()
-	 */
-	protected void setUp() throws Exception
-	{
-		super.setUp();
-		LogManager.getManager().addWriter("", Util.getLogWriter());
-		link = new KNXNetworkLinkIP(KNXNetworkLinkIP.TUNNELING, Util.getLocalHost(),
-			Util.getServer(), false, TPSettings.TP1);
+		link = KNXNetworkLinkIP.newTunnelingLink(Util.getLocalHost(), Util.getServer(), false, TPSettings.TP1);
 		mp = new ManagementProceduresImpl(link);
 		nonexist = Util.getNonExistingKnxDevice();
 	}
 
-	/*
-	 * (non-Javadoc)
-	 * @see junit.framework.TestCase#tearDown()
-	 */
-	protected void tearDown() throws Exception
+	@AfterEach
+	void tearDown() throws Exception
 	{
 		link.close();
-		LogManager.getManager().removeWriter("", Util.getLogWriter());
-		super.tearDown();
 	}
 
 	/**
 	 * Test method for
-	 * {@link tuwien.auto.calimero.mgmt.ManagementProceduresImpl#ManagementProceduresImpl
-	 * (tuwien.auto.calimero.link.KNXNetworkLink)}.
+	 * {@link ManagementProceduresImpl#ManagementProceduresImpl(tuwien.auto.calimero.link.KNXNetworkLink)}.
 	 *
 	 * @throws KNXLinkClosedException
 	 */
+	@Test
 	public final void testManagementProceduresImpl() throws KNXLinkClosedException
 	{
-		final ManagementProcedures test = new ManagementProceduresImpl(link);
-		test.detach();
+		try (final ManagementProcedures test = new ManagementProceduresImpl(link)) {};
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.mgmt.ManagementProceduresImpl#readAddress()}.
+	 * Test method for {@link ManagementProceduresImpl#readAddress()}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testReadAddress() throws KNXException, InterruptedException
 	{
 		IndividualAddress[] read = mp.readAddress();
@@ -122,12 +112,12 @@ public class ManagementProceduresImplTest extends TestCase
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.mgmt.ManagementProceduresImpl#writeAddress(IndividualAddress)}.
+	 * Test method for {@link ManagementProceduresImpl#writeAddress(IndividualAddress)}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testWriteAddress() throws KNXException, InterruptedException
 	{
 		final IndividualAddress programDevice = Util.getKnxDevice();
@@ -146,12 +136,12 @@ public class ManagementProceduresImplTest extends TestCase
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.mgmt.ManagementProceduresImpl#resetAddress()}.
+	 * Test method for {@link ManagementProceduresImpl#resetAddress()}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testResetAddress() throws KNXException, InterruptedException
 	{
 		mp.resetAddress();
@@ -163,12 +153,12 @@ public class ManagementProceduresImplTest extends TestCase
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.mgmt.ManagementProceduresImpl#isAddressOccupied(IndividualAddress)}.
+	 * Test method for {@link ManagementProceduresImpl#isAddressOccupied(IndividualAddress)}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testIsAddressOccupied() throws KNXException, InterruptedException
 	{
 		assertTrue(mp.isAddressOccupied(device));
@@ -176,42 +166,41 @@ public class ManagementProceduresImplTest extends TestCase
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.mgmt.ManagementProceduresImpl#readAddress(byte[])}.
+	 * Test method for {@link ManagementProceduresImpl#readAddress(byte[])}.
+	 *
 	 * @throws InterruptedException on interrupted thread
 	 * @throws KNXException
-	 *
 	 */
+	@Test
 	public final void testReadAddressByte() throws KNXException, InterruptedException
 	{
-		final byte[] serialNo = new byte[] {0x01, 0x02, 0x03, 0x04, 0x05, 0x06 };
+		final byte[] serialNo = new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06 };
 		mp.readAddress(serialNo);
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.mgmt.ManagementProceduresImpl#writeAddress(byte[], IndividualAddress)}.
+	 * Test method for {@link ManagementProceduresImpl#writeAddress(byte[], IndividualAddress)}.
+	 *
 	 * @throws InterruptedException on interrupted thread
 	 * @throws KNXException
-	 *
 	 */
-	public final void testWriteAddressByteArrayIndividualAddress() throws KNXException,
-		InterruptedException
+	@Test
+	public final void testWriteAddressByteArrayIndividualAddress() throws KNXException, InterruptedException
 	{
 		final byte[] serialNo = new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06 };
 		mp.writeAddress(serialNo, new IndividualAddress(1, 1, 5));
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.mgmt.ManagementProceduresImpl#scanNetworkRouters()}.
+	 * Test method for {@link ManagementProceduresImpl#scanNetworkRouters()}.
 	 *
 	 * @throws InterruptedException on interrupted thread
 	 * @throws KNXLinkClosedException
 	 * @throws KNXTimeoutException
 	 */
-	public final void testScanNetworkRouters() throws KNXTimeoutException, KNXLinkClosedException,
-		InterruptedException
+	@Test
+	@Slow
+	public final void testScanNetworkRouters() throws KNXTimeoutException, KNXLinkClosedException, InterruptedException
 	{
 		System.out.println("start scanNetworkRouters, takes a while ...");
 		final IndividualAddress[] list = mp.scanNetworkRouters();
@@ -220,15 +209,15 @@ public class ManagementProceduresImplTest extends TestCase
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.mgmt.ManagementProceduresImpl#scanNetworkDevices(int, int)}.
+	 * Test method for {@link ManagementProceduresImpl#scanNetworkDevices(int, int)}.
 	 *
 	 * @throws InterruptedException on interrupted thread
 	 * @throws KNXLinkClosedException
 	 * @throws KNXTimeoutException
 	 */
-	public final void testScanNetworkDevices() throws KNXTimeoutException, KNXLinkClosedException,
-		InterruptedException
+	@Test
+	@Slow
+	public final void testScanNetworkDevices() throws KNXTimeoutException, KNXLinkClosedException, InterruptedException
 	{
 		try {
 			mp.scanNetworkDevices(-1, 0);
@@ -263,13 +252,12 @@ public class ManagementProceduresImplTest extends TestCase
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.mgmt.ManagementProceduresImpl#setProgrammingMode(
-	 * IndividualAddress, boolean)}.
+	 * Test method for {@link ManagementProceduresImpl#setProgrammingMode(IndividualAddress, boolean)}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testSetProgrammingMode() throws KNXException, InterruptedException
 	{
 		mp.setProgrammingMode(device, true);
@@ -277,13 +265,12 @@ public class ManagementProceduresImplTest extends TestCase
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.mgmt.ManagementProceduresImpl#writeMemory(
-	 * IndividualAddress, long, byte[], boolean, boolean)}.
+	 * Test method for {@link ManagementProceduresImpl#writeMemory(IndividualAddress, long, byte[], boolean, boolean)}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testWriteMemoryShort() throws KNXException, InterruptedException
 	{
 		final byte[] data = new byte[8];
@@ -296,13 +283,12 @@ public class ManagementProceduresImplTest extends TestCase
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.mgmt.ManagementProceduresImpl#writeMemory(
-	 * IndividualAddress, long, byte[], boolean, boolean)}.
+	 * Test method for {@link ManagementProceduresImpl#writeMemory(IndividualAddress, long, byte[], boolean, boolean)}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testWriteMemoryLong() throws KNXException, InterruptedException
 	{
 		final byte[] data = new byte[32];
@@ -315,26 +301,24 @@ public class ManagementProceduresImplTest extends TestCase
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.mgmt.ManagementProceduresImpl#readMemory(
-	 * tuwien.auto.calimero.IndividualAddress, long, int)}.
+	 * Test method for {@link ManagementProceduresImpl#readMemory(tuwien.auto.calimero.IndividualAddress, long, int)}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testReadMemoryShort() throws KNXException, InterruptedException
 	{
 		/*final byte[] data =*/ mp.readMemory(device, 0x10, 8);
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.mgmt.ManagementProceduresImpl#readMemory(
-	 * IndividualAddress, long, int)}.
+	 * Test method for {@link ManagementProceduresImpl#readMemory(IndividualAddress, long, int)}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testReadMemoryLong() throws KNXException, InterruptedException
 	{
 		/*final byte[] data =*/ mp.readMemory(device, 0x20, 17);

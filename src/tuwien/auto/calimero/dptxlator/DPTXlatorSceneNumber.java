@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2013, 2015 B. Malinowsky
+    Copyright (c) 2013, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -39,8 +39,8 @@ package tuwien.auto.calimero.dptxlator;
 import java.util.HashMap;
 import java.util.Map;
 
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 
 /**
  * Translator for KNX DPTs with main number 17, representing <b>Scene Number</b>.
@@ -61,13 +61,12 @@ public class DPTXlatorSceneNumber extends DPTXlator
 	/**
 	 * DPT ID 17.001, Scene Number; scenes are numbered with values from <b>0</b> to <b>63</b>.
 	 */
-	public static final DPT DPT_SCENE_NUMBER = new DPT("17.001", "Scene Number", "0",
-			 "63");
+	public static final DPT DPT_SCENE_NUMBER = new DPT("17.001", "Scene Number", "0", "63");
 
-	private static final Map types;
+	private static final Map<String, DPT> types;
 
 	static {
-		types = new HashMap();
+		types = new HashMap<>();
 		types.put(DPT_SCENE_NUMBER.getID(), DPT_SCENE_NUMBER);
 	}
 
@@ -97,9 +96,7 @@ public class DPTXlatorSceneNumber extends DPTXlator
 		data = new short[1];
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getValue()
-	 */
+	@Override
 	public String getValue()
 	{
 		return fromDPT(0);
@@ -107,7 +104,6 @@ public class DPTXlatorSceneNumber extends DPTXlator
 
 	/**
 	 * Sets one new translation item, replacing any old items.
-	 * <p>
 	 *
 	 * @param scene number, 0 &lt;= scene number &lt;= 63
 	 */
@@ -118,7 +114,6 @@ public class DPTXlatorSceneNumber extends DPTXlator
 
 	/**
 	 * Returns the scene number of the first translation item.
-	 * <p>
 	 *
 	 * @return unsigned 6 Bit using type short
 	 */
@@ -133,14 +128,13 @@ public class DPTXlatorSceneNumber extends DPTXlator
 	 * @return the scene number
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getNumericValue()
 	 */
+	@Override
 	public final double getNumericValue()
 	{
 		return getSceneNumber();
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getAllValues()
-	 */
+	@Override
 	public String[] getAllValues()
 	{
 		final String[] s = new String[data.length];
@@ -149,10 +143,8 @@ public class DPTXlatorSceneNumber extends DPTXlator
 		return s;
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getSubTypes()
-	 */
-	public final Map getSubTypes()
+	@Override
+	public final Map<String, DPT> getSubTypes()
 	{
 		return types;
 	}
@@ -161,7 +153,7 @@ public class DPTXlatorSceneNumber extends DPTXlator
 	 * @return the subtypes of the 8 Bit unsigned translator type
 	 * @see DPTXlator#getSubTypesStatic()
 	 */
-	protected static Map getSubTypesStatic()
+	protected static Map<String, DPT> getSubTypesStatic()
 	{
 		return types;
 	}
@@ -172,6 +164,7 @@ public class DPTXlatorSceneNumber extends DPTXlator
 		return Integer.toString(scene);
 	}
 
+	@Override
 	protected void toDPT(final String value, final short[] dst, final int index)
 		throws KNXFormatException
 	{

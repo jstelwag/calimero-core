@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2015 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -36,10 +36,8 @@
 
 package tuwien.auto.calimero;
 
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
 import tuwien.auto.calimero.xml.KNXMLException;
-import tuwien.auto.calimero.xml.XMLReader;
+import tuwien.auto.calimero.xml.XmlReader;
 
 /**
  * Represents an immutable KNX group address.
@@ -137,7 +135,7 @@ public class GroupAddress extends KNXAddress
 	 * @throws KNXMLException if the xml element is no KNX address or the
 	 *         address couldn't be read in correctly
 	 */
-	public GroupAddress(final XMLReader r) throws KNXMLException
+	public GroupAddress(final XmlReader r) throws KNXMLException
 	{
 		super(r);
 	}
@@ -220,7 +218,8 @@ public class GroupAddress extends KNXAddress
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.KNXAddress#getType()
 	 */
-	public String getType()
+	@Override
+	public final String getType()
 	{
 		return ATTR_GROUP;
 	}
@@ -233,6 +232,7 @@ public class GroupAddress extends KNXAddress
 	 *
 	 * @return the address string
 	 */
+	@Override
 	public String toString()
 	{
 		if (fmt3Level)
@@ -249,6 +249,7 @@ public class GroupAddress extends KNXAddress
 	 * @return <code>true</code> iff <code>obj</code> is of this type and contains the
 	 *         same address (raw), <code>false</code> otherwise
 	 */
+	@Override
 	public boolean equals(final Object obj)
 	{
 		if (obj instanceof GroupAddress)
@@ -259,28 +260,27 @@ public class GroupAddress extends KNXAddress
 	/* (non-Javadoc)
 	 * @see java.lang.Object#hashCode()
 	 */
+	@Override
 	public int hashCode()
 	{
 		return address;
 	}
 
+	@Override
 	void init(final String address) throws KNXFormatException
 	{
 		final String[] tokens = parse(address);
 		try {
 			if (tokens.length == 1)
-				init(Integer.decode(tokens[0]).intValue());
+				init(Integer.decode(tokens[0]));
 			else if (tokens.length == 2)
 				init(Byte.parseByte(tokens[0]), Short.parseShort(tokens[1]));
 			else if (tokens.length == 3)
 				init(Byte.parseByte(tokens[0]), Byte.parseByte(tokens[1]),
 						Short.parseShort(tokens[2]));
 		}
-		catch (final NumberFormatException e) {
-			throw new KNXFormatException("invalid group address", address);
-		}
-		catch (final KNXIllegalArgumentException e) {
-			throw new KNXFormatException(e.getMessage());
+		catch (NumberFormatException | KNXIllegalArgumentException e) {
+			throw new KNXFormatException("invalid group address", address, e);
 		}
 	}
 

@@ -43,20 +43,25 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
+import org.slf4j.Logger;
 
 import tuwien.auto.calimero.CloseEvent;
 import tuwien.auto.calimero.DataUnitBuilder;
 import tuwien.auto.calimero.DetachEvent;
 import tuwien.auto.calimero.FrameEvent;
 import tuwien.auto.calimero.IndividualAddress;
-import tuwien.auto.calimero.exception.KNXException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.exception.KNXIllegalStateException;
-import tuwien.auto.calimero.exception.KNXRemoteException;
-import tuwien.auto.calimero.exception.KNXTimeoutException;
+import tuwien.auto.calimero.KNXException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXIllegalStateException;
+import tuwien.auto.calimero.KNXRemoteException;
+import tuwien.auto.calimero.KNXTimeoutException;
 import tuwien.auto.calimero.link.KNXLinkClosedException;
 import tuwien.auto.calimero.link.KNXNetworkLink;
-import tuwien.auto.calimero.log.LogManager;
 import tuwien.auto.calimero.log.LogService;
 
 /**
@@ -64,9 +69,11 @@ import tuwien.auto.calimero.log.LogService;
  * <p>
  * In general, invoked procedures should not be run concurrently on the same remote endpoint. As
  * precaution, this implementation will guard against such behavior by executing procedures
- * synchronized on the used management client instance if considered necessary ({@link ManagementClient}).
- * Note that this is not sufficient to guarantee non-concurrent
- * execution of procedures on the same remote endpoint in general (and not supported by the KNX standard).
+ * synchronized on the used management client instance ({@link ManagementClient}) where necessary.
+ * Hence, procedures over the same management client instance are executed in sequence. In general,
+ * this is not sufficient to guarantee non-concurrent execution of procedures on the same remote
+ * endpoint (e.g., one could create more than one management client object). It is the
+ * responsibility of the application logic to enforce the necessary limitations.
  *
  * @author B. Malinowsky
  */
@@ -86,54 +93,77 @@ public class ManagementProceduresImpl implements ManagementProcedures
 	private final boolean detachMgmtClient;
 	private final TransportLayer tl;
 
-	private final LogService logger = LogManager.getManager().getLogService("MgmtProc");
+	private final Logger logger = LogService.getLogger("calimero.mgmt.MgmtProc");
 
 	private static final class TLListener implements TransportListener
 	{
-		private final Set devices;
+		private final Set<IndividualAddress> devices;
+		private final Consumer<IndividualAddress> disconnect;
 		private final boolean routers;
 
-		private TLListener(final Set scanResult, final boolean scanRouters)
+		private TLListener(final Set<IndividualAddress> scanResult, final boolean scanRouters)
 		{
 			devices = scanResult;
+			disconnect = null;
 			routers = scanRouters;
 		}
 
+		private TLListener(final Consumer<IndividualAddress> onDisconnect, final boolean scanRouters)
+		{
+			disconnect = onDisconnect;
+			devices = null;
+			routers = scanRouters;
+		}
+
+		@Override
 		public void broadcast(final FrameEvent e)
 		{}
 
+		@Override
 		public void dataConnected(final FrameEvent e)
 		{}
 
+		@Override
 		public void dataIndividual(final FrameEvent e)
 		{}
 
+		@Override
 		public void disconnected(final Destination d)
 		{
 			if (d.getDisconnectedBy() != Destination.REMOTE_ENDPOINT)
 				return;
 			final IndividualAddress addr = d.getAddress();
 			if (routers && addr.getDevice() == 0)
-				devices.add(addr);
+				accept(addr);
 			else if (!routers && addr.getDevice() != 0)
+				accept(addr);
+		}
+
+		private void accept(final IndividualAddress addr)
+		{
+			if (disconnect != null)
+				disconnect.accept(addr);
+			else
 				devices.add(addr);
 		}
 
+		@Override
 		public void group(final FrameEvent e)
 		{}
 
+		@Override
 		public void detached(final DetachEvent e)
 		{}
 
+		@Override
 		public void linkClosed(final CloseEvent e)
 		{}
 	};
 
 	/**
 	 * Creates a new management procedures instance, using the supplied KNX network link.
-	 * <p>
 	 *
-	 * @param link the KNX network link, with link in open state
+	 * @param link the KNX network link in open state, the management procedures instance does not take ownership
 	 * @throws KNXLinkClosedException on closed {@link KNXNetworkLink}
 	 */
 	public ManagementProceduresImpl(final KNXNetworkLink link)
@@ -147,7 +177,6 @@ public class ManagementProceduresImpl implements ManagementProcedures
 	/**
 	 * Creates a new management procedures instance, using the supplied management client
 	 * for application layer services.
-	 * <p>
 	 *
 	 * @param mgmtClient the management client, with a network link attached and in open
 	 *        state
@@ -166,6 +195,7 @@ public class ManagementProceduresImpl implements ManagementProcedures
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.mgmt.ManagementProcedures#readAddress()
 	 */
+	@Override
 	public IndividualAddress[] readAddress() throws KNXException, InterruptedException
 	{
 		synchronized (mc) {
@@ -184,16 +214,33 @@ public class ManagementProceduresImpl implements ManagementProcedures
 		}
 	}
 
+	@Override
+	public void readDomainAddress(final BiConsumer<IndividualAddress, byte[]> device)
+		throws KNXException, InterruptedException
+	{
+		synchronized (mc) {
+			final int oldTimeout = mc.getResponseTimeout();
+			mc.setResponseTimeout(3);
+			try {
+				mc.readDomainAddress(device);
+			}
+			catch (final KNXTimeoutException e) {}
+			finally {
+				mc.setResponseTimeout(oldTimeout);
+			}
+		}
+	}
+
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.mgmt.ManagementProcedures
 	 * #writeAddress(tuwien.auto.calimero.IndividualAddress)
 	 */
+	@Override
 	public boolean writeAddress(final IndividualAddress newAddress) throws KNXException,
 		InterruptedException
 	{
-		final Destination dst = getOrCreateDestination(newAddress);
 		boolean exists = false;
-		try {
+		try (final Destination dst = getOrCreateDestination(newAddress)) {
 			mc.readDeviceDesc(dst, 0);
 			exists = true;
 		}
@@ -203,15 +250,11 @@ public class ManagementProceduresImpl implements ManagementProcedures
 		catch (final KNXTimeoutException e) {
 			// no remote endpoint answered, we proceed
 		}
-		finally {
-			dst.destroy();
-		}
 
 		boolean setAddr = false;
 		synchronized (mc) {
 			final int oldTimeout = mc.getResponseTimeout();
-			final Destination verify = mc.createDestination(newAddress, true);
-			try {
+			try (final Destination verify = mc.createDestination(newAddress, true)) {
 				mc.setResponseTimeout(1);
 				// ??? this does not conform to spec, where no max. attempts are given
 				// the problem is that we potentially loop forever (which would be correct)
@@ -225,11 +268,9 @@ public class ManagementProceduresImpl implements ManagementProcedures
 							setAddr = true;
 					}
 					catch (final KNXException e) {
-						// a device with newAddress exists but is not in programming mode,
-						// bail out
+						// a device with newAddress exists but is not in programming mode, bail out
 						if (exists) {
-							logger.warn("device exists but is not in programming mode, " +
-									"cancel writing address");
+							logger.warn("device exists but is not in programming mode, cancel writing address");
 							return false;
 						}
 					}
@@ -244,7 +285,6 @@ public class ManagementProceduresImpl implements ManagementProcedures
 				mc.restart(verify);
 			}
 			finally {
-				verify.destroy();
 				mc.setResponseTimeout(oldTimeout);
 			}
 		}
@@ -254,11 +294,11 @@ public class ManagementProceduresImpl implements ManagementProcedures
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.mgmt.ManagementProcedures#resetAddress()
 	 */
+	@Override
 	public void resetAddress() throws KNXException, InterruptedException
 	{
 		final IndividualAddress def = new IndividualAddress(0xffff);
-		final Destination dst = mc.createDestination(def, true);
-		try {
+		try (final Destination dst = mc.createDestination(def, true)) {
 			while (true) {
 				mc.writeAddress(def);
 				mc.restart(dst);
@@ -271,20 +311,17 @@ public class ManagementProceduresImpl implements ManagementProcedures
 				}
 			}
 		}
-		finally {
-			dst.destroy();
-		}
 	}
 
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.mgmt.ManagementProcedures
 	 * #isAddressOccupied(tuwien.auto.calimero.IndividualAddress)
 	 */
+	@Override
 	public boolean isAddressOccupied(final IndividualAddress devAddr)
 		throws KNXException, InterruptedException
 	{
-		final Destination dst = mc.createDestination(devAddr, true);
-		try {
+		try (final Destination dst = mc.createDestination(devAddr, true)) {
 			mc.readDeviceDesc(dst, 0);
 		}
 		catch (final KNXTimeoutException e) {
@@ -295,15 +332,13 @@ public class ManagementProceduresImpl implements ManagementProcedures
 			if (e.getDestination().getDisconnectedBy() != Destination.REMOTE_ENDPOINT)
 				return false;
 		}
-		finally {
-			dst.destroy();
-		}
 		return true;
 	}
 
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.mgmt.ManagementProcedures#readAddress(byte[])
 	 */
+	@Override
 	public IndividualAddress readAddress(final byte[] serialNo) throws KNXException,
 		InterruptedException
 	{
@@ -314,6 +349,7 @@ public class ManagementProceduresImpl implements ManagementProcedures
 	 * @see tuwien.auto.calimero.mgmt.ManagementProcedures
 	 * #writeAddress(byte[], tuwien.auto.calimero.IndividualAddress)
 	 */
+	@Override
 	public boolean writeAddress(final byte[] serialNo, final IndividualAddress newAddress)
 		throws KNXException, InterruptedException
 	{
@@ -336,10 +372,11 @@ public class ManagementProceduresImpl implements ManagementProcedures
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.mgmt.ManagementProcedures#scanNetworkRouters()
 	 */
+	@Override
 	public IndividualAddress[] scanNetworkRouters() throws KNXTimeoutException,
 		KNXLinkClosedException, InterruptedException
 	{
-		final List addresses = new ArrayList();
+		final List<IndividualAddress> addresses = new ArrayList<>();
 		for (int address = 0x0000; address <= 0xFF00; address += 0x0100)
 			addresses.add(new IndividualAddress(address));
 		return scanAddresses(addresses, true);
@@ -348,6 +385,7 @@ public class ManagementProceduresImpl implements ManagementProcedures
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.mgmt.ManagementProcedures#scanNetworkDevices(int, int)
 	 */
+	@Override
 	public IndividualAddress[] scanNetworkDevices(final int area, final int line)
 		throws KNXTimeoutException, KNXLinkClosedException, InterruptedException
 	{
@@ -356,7 +394,7 @@ public class ManagementProceduresImpl implements ManagementProcedures
 		if (line < 0 || line > 0xf)
 			throw new KNXIllegalArgumentException("line out of range [0..0xf]");
 
-		final List addresses = new ArrayList();
+		final List<IndividualAddress> addresses = new ArrayList<>();
 		for (int device = 0; device <= 0xff; ++device) {
 			final IndividualAddress remote = new IndividualAddress(area, line, device);
 			addresses.add(remote);
@@ -364,15 +402,28 @@ public class ManagementProceduresImpl implements ManagementProcedures
 		return scanAddresses(addresses, false);
 	}
 
+	@Override
+	public void scanNetworkDevices(final int area, final int line, final Consumer<IndividualAddress> device)
+		throws KNXTimeoutException, KNXLinkClosedException, InterruptedException
+	{
+		if (area < 0 || area > 0xf)
+			throw new KNXIllegalArgumentException("area out of range [0..0xf]");
+		if (line < 0 || line > 0xf)
+			throw new KNXIllegalArgumentException("line out of range [0..0xf]");
+		final List<IndividualAddress> addresses = IntStream.rangeClosed(0, 0xff)
+				.mapToObj((i) -> new IndividualAddress(area, line, i)).collect(Collectors.toList());
+		scanAddresses(addresses, false, device);
+	}
+
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.mgmt.ManagementProcedures#scanSerialNumbers(int)
 	 */
-	public List scanSerialNumbers(final int medium) throws KNXException, InterruptedException
+	@Override
+	public List<byte[]> scanSerialNumbers(final int medium) throws KNXException, InterruptedException
 	{
-		final Destination dst = mc.createDestination(new IndividualAddress(0, medium, 0xff), true);
 		synchronized (mc) {
 			final int oldTimeout = mc.getResponseTimeout();
-			try {
+			try (final Destination dst = mc.createDestination(new IndividualAddress(0, medium, 0xff), true)) {
 				mc.setResponseTimeout(7);
 				return ((ManagementClientImpl) mc).readProperty2(dst, 0,
 						PropertyAccess.PID.SERIAL_NUMBER, 1, 1);
@@ -382,10 +433,9 @@ public class ManagementProceduresImpl implements ManagementProcedures
 			}
 			finally {
 				mc.setResponseTimeout(oldTimeout);
-				dst.destroy();
 			}
 		}
-		return Collections.EMPTY_LIST;
+		return Collections.emptyList();
 	}
 
 	/*
@@ -393,6 +443,7 @@ public class ManagementProceduresImpl implements ManagementProcedures
 	 * @see tuwien.auto.calimero.mgmt.ManagementProcedures#setProgrammingMode
 	 * (tuwien.auto.calimero.IndividualAddress, boolean)
 	 */
+	@Override
 	public void setProgrammingMode(final IndividualAddress device, final boolean programming)
 		throws KNXException, InterruptedException
 	{
@@ -425,6 +476,7 @@ public class ManagementProceduresImpl implements ManagementProcedures
 	 * @see tuwien.auto.calimero.mgmt.ManagementProcedures#writeMemory
 	 * (tuwien.auto.calimero.IndividualAddress, long, byte[], boolean, boolean)
 	 */
+	@Override
 	public void writeMemory(final IndividualAddress device, final long startAddress,
 		final byte[] data, final boolean verifyWrite, final boolean verifyByServer)
 		throws KNXException, InterruptedException
@@ -478,10 +530,9 @@ public class ManagementProceduresImpl implements ManagementProcedures
 		// write memory in chunks matching the maximum asdu length of the device
 		final int asduLength = readMaxAsduLength(d);
 		for (int i = 0; i < write.length; i += asduLength) {
-			final byte[] range = DataUnitBuilder.copyOfRange(write, i, i + asduLength);
+			final byte[] range = Arrays.copyOfRange(write, i, i + asduLength);
 
-			// on server verification, our mgmt client will already do the response
-			// value comparison
+			// on server verification, our mgmt client will already compare the response value
 			mc.writeMemory(d, (int) startAddress + i, range);
 
 			// on manual write verification, we explicitly read back memory
@@ -493,6 +544,7 @@ public class ManagementProceduresImpl implements ManagementProcedures
 		}
 	}
 
+	@Override
 	public byte[] readMemory(final IndividualAddress device, final long startAddress,
 		final int bytes) throws KNXException, InterruptedException
 	{
@@ -517,10 +569,7 @@ public class ManagementProceduresImpl implements ManagementProcedures
 		return read;
 	}
 
-	/*
-	 * (non-Javadoc)
-	 * @see tuwien.auto.calimero.mgmt.ManagementProcedures#detach()
-	 */
+	@Override
 	public void detach()
 	{
 		if (detachMgmtClient)
@@ -542,17 +591,18 @@ public class ManagementProceduresImpl implements ManagementProcedures
 		return d != null ? d : tl.createDestination(device, true, keepAlive, verifyByServer);
 	}
 
-	private IndividualAddress[] scanAddresses(final List addresses, final boolean routers)
-		throws KNXTimeoutException, KNXLinkClosedException, InterruptedException
+	private IndividualAddress[] scanAddresses(final List<IndividualAddress> addresses,
+		final boolean routers) throws KNXTimeoutException, KNXLinkClosedException,
+		InterruptedException
 	{
-		final Set devices = new HashSet();
+		final Set<IndividualAddress> devices = new HashSet<>();
 		final TransportListener tll = new TLListener(devices, routers);
 		tl.addTransportListener(tll);
 
-		final List destinations = new ArrayList();
+		final List<Destination> destinations = new ArrayList<>();
 		try {
-			for (final Iterator i = addresses.iterator(); i.hasNext();) {
-				final IndividualAddress remote = (IndividualAddress) i.next();
+			for (final Iterator<IndividualAddress> i = addresses.iterator(); i.hasNext();) {
+				final IndividualAddress remote = i.next();
 				final Destination d = getOrCreateDestination(remote, true, false);
 				destinations.add(d);
 				tl.connect(d);
@@ -565,14 +615,40 @@ public class ManagementProceduresImpl implements ManagementProcedures
 		}
 		finally {
 			tl.removeTransportListener(tll);
-			for (final Iterator i = destinations.iterator(); i.hasNext();) {
-				final Destination d = (Destination) i.next();
+			for (final Iterator<Destination> i = destinations.iterator(); i.hasNext();) {
+				final Destination d = i.next();
 				tl.destroyDestination(d);
 			}
 		}
-		final IndividualAddress[] array = (IndividualAddress[]) devices
+		final IndividualAddress[] array = devices
 				.toArray(new IndividualAddress[devices.size()]);
 		return array;
+	}
+
+	private void scanAddresses(final List<IndividualAddress> addresses, final boolean routers,
+		final Consumer<IndividualAddress> response)
+			throws KNXTimeoutException, KNXLinkClosedException, InterruptedException
+	{
+		final TransportListener tll = new TLListener(response, routers);
+		tl.addTransportListener(tll);
+
+		List<Destination> dst = new ArrayList<>();
+		try {
+			dst = addresses.stream().map((a) -> getOrCreateDestination(a, true, false)).collect(Collectors.toList());
+			for (final Destination d : dst) {
+				tl.connect(d);
+				// increased from 100 (the default) to minimize chance of overflow over FT1.2
+				Thread.sleep(115);
+			}
+			// we wait in total (115 + 6000 + 1000 + 100) ms for a possible T-disconnect, taking
+			// into account the KNXnet/IP tunneling.req retransmit timeout plus some network delay
+			waitFor(disconnectTimeout + 1100);
+		}
+		finally {
+			tl.removeTransportListener(tll);
+			// TODO this is not sufficient in the case getOrCreateDestination throws
+			dst.forEach(Destination::destroy);
+		}
 	}
 
 	private int readMaxAsduLength(final Destination d) throws InterruptedException

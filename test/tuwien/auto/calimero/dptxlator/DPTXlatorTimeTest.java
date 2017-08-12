@@ -43,10 +43,9 @@ import java.util.Date;
 import org.junit.Assert;
 
 import junit.framework.TestCase;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 import tuwien.auto.calimero.Util;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.log.LogManager;
 
 /**
  * Test for DPTXlatorTime.
@@ -57,8 +56,7 @@ import tuwien.auto.calimero.log.LogManager;
 public class DPTXlatorTimeTest extends TestCase
 {
 	private DPTXlatorTime t;
-	private final String[] values =
-		new String[] { "mon, 00:00:00", "WED, 23:59:59", "  12:43:23  " };
+	private final String[] values = new String[] { "mon, 00:00:00", "WED, 23:59:59", "  12:43:23  " };
 	private final DPT dpt = DPTXlatorTime.DPT_TIMEOFDAY;
 
 	// wed, 22:33:44, offset 1
@@ -75,22 +73,14 @@ public class DPTXlatorTimeTest extends TestCase
 	/* (non-Javadoc)
 	 * @see junit.framework.TestCase#setUp()
 	 */
+	@Override
 	protected void setUp() throws Exception
 	{
 		super.setUp();
-		LogManager.getManager().addWriter("DPTXlator", Util.getLogWriter());
+		Util.setupLogging("DPTXlator");
 		t = new DPTXlatorTime(DPTXlatorTime.DPT_TIMEOFDAY);
 		// reset to default to not interfere with tests
 		DPTXlatorTime.useValueFormat(null);
-	}
-
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#tearDown()
-	 */
-	protected void tearDown() throws Exception
-	{
-		LogManager.getManager().removeWriter("DPTXlator", Util.getLogWriter());
-		super.tearDown();
 	}
 
 	/**
@@ -157,8 +147,7 @@ public class DPTXlatorTimeTest extends TestCase
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.dptxlator.DPTXlatorTime#setData(byte[], int)}.
+	 * Test method for {@link tuwien.auto.calimero.dptxlator.DPTXlatorTime#setData(byte[], int)}.
 	 */
 	public final void testSetDataByteArrayInt()
 	{
@@ -179,8 +168,7 @@ public class DPTXlatorTimeTest extends TestCase
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.dptxlator.DPTXlatorTime#getData(byte[], int)}.
+	 * Test method for {@link tuwien.auto.calimero.dptxlator.DPTXlatorTime#getData(byte[], int)}.
 	 */
 	public final void testGetDataByteArrayInt()
 	{
@@ -263,8 +251,7 @@ public class DPTXlatorTimeTest extends TestCase
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.dptxlator.DPTXlatorTime#getValueMilliseconds()}.
+	 * Test method for {@link tuwien.auto.calimero.dptxlator.DPTXlatorTime#getValueMilliseconds()}.
 	 */
 	public final void testGetValueMilliseconds()
 	{
@@ -289,8 +276,7 @@ public class DPTXlatorTimeTest extends TestCase
 
 	/**
 	 * Test method for
-	 * {@link tuwien.auto.calimero.dptxlator.DPTXlatorTime#useValueFormat
-	 * (java.lang.String)}.
+	 * {@link tuwien.auto.calimero.dptxlator.DPTXlatorTime#useValueFormat (java.lang.String)}.
 	 *
 	 * @throws KNXFormatException
 	 */

@@ -39,10 +39,9 @@ package tuwien.auto.calimero.dptxlator;
 import java.util.Arrays;
 
 import junit.framework.TestCase;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 import tuwien.auto.calimero.Util;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.log.LogManager;
 
 /**
  * @author B. Malinowsky
@@ -81,10 +80,11 @@ public class DPTXlatorStringTest extends TestCase
 	/* (non-Javadoc)
 	 * @see junit.framework.TestCase#setUp()
 	 */
+	@Override
 	protected void setUp() throws Exception
 	{
 		super.setUp();
-		LogManager.getManager().addWriter("DPTXlator", Util.getLogWriter());
+		Util.setupLogging("DPTXlator");
 		t = new DPTXlatorString(DPTXlatorString.DPT_STRING_8859_1);
 		data1[0] = (byte) 't';
 		data1[1] = (byte) 'e';
@@ -104,16 +104,6 @@ public class DPTXlatorStringTest extends TestCase
 			data[i] = dataMax[i - 14];
 		for (int i = 28; i < 42; ++i)
 			data[i] = data2[i - 28];
-	}
-
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#tearDown()
-	 */
-	protected void tearDown() throws Exception
-	{
-		Thread.sleep(100);
-		LogManager.getManager().removeWriter("DPTXlator", Util.getLogWriter());
-		super.tearDown();
 	}
 
 	/**

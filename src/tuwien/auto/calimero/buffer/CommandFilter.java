@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2011 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -42,6 +42,8 @@ import java.util.List;
 
 import tuwien.auto.calimero.GroupAddress;
 import tuwien.auto.calimero.KNXAddress;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalStateException;
 import tuwien.auto.calimero.buffer.Configuration.NetworkFilter;
 import tuwien.auto.calimero.buffer.Configuration.RequestFilter;
 import tuwien.auto.calimero.buffer.LDataObjectQueue.QueueItem;
@@ -53,8 +55,7 @@ import tuwien.auto.calimero.cemi.CEMIFactory;
 import tuwien.auto.calimero.cemi.CEMILData;
 import tuwien.auto.calimero.datapoint.Datapoint;
 import tuwien.auto.calimero.datapoint.DatapointModel;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalStateException;
+import tuwien.auto.calimero.log.LogService;
 
 /**
  * Predefined filter for filtering KNX messages of command based datapoints into the
@@ -65,7 +66,7 @@ import tuwien.auto.calimero.exception.KNXIllegalStateException;
  * {@link Configuration.RequestFilter} for command-based datapoint messages.<br>
  * Command based messages are buffered using a {@link LDataObjectQueue} (an object of this
  * type is also expected when the request method or getNextIndication method is invoked).
- * 
+ *
  * @author B. Malinowsky
  */
 public class CommandFilter implements NetworkFilter, RequestFilter
@@ -75,6 +76,7 @@ public class CommandFilter implements NetworkFilter, RequestFilter
 		QueueListenerImpl()
 		{}
 
+		@Override
 		public void queueFilled(final LDataObjectQueue queue)
 		{
 			if (userListener != null)
@@ -82,20 +84,19 @@ public class CommandFilter implements NetworkFilter, RequestFilter
 					userListener.queueFilled(queue);
 				}
 				catch (final RuntimeException e) {
-					NetworkBuffer.logger.error(
+					LogService.getLogger("calimero").error(
 						"L-Data queue listener unexpected behavior", e);
 				}
 		}
 	}
 
 	// stores LDataObjectQueues objects
-	private final List indicationKeys = new LinkedList();
+	private final List<CacheObject> indicationKeys = new LinkedList<>();
 	private final QueueListener ql = new QueueListenerImpl();
 	private volatile QueueListener userListener;
 
 	/**
 	 * Creates a new command filter.
-	 * <p>
 	 */
 	public CommandFilter()
 	{}
@@ -104,6 +105,7 @@ public class CommandFilter implements NetworkFilter, RequestFilter
 	 * @see tuwien.auto.calimero.buffer.Configuration.NetworkFilter#init
 	 * (tuwien.auto.calimero.buffer.Configuration)
 	 */
+	@Override
 	public void init(final Configuration c)
 	{}
 
@@ -112,7 +114,7 @@ public class CommandFilter implements NetworkFilter, RequestFilter
 	 * queue objects.
 	 * <p>
 	 * The listener will replace any previously set listener.
-	 * 
+	 *
 	 * @param l the listener to set, use <code>null</code> for no listener
 	 */
 	public void setQueueListener(final QueueListener l)
@@ -123,7 +125,7 @@ public class CommandFilter implements NetworkFilter, RequestFilter
 	/**
 	 * Returns whether new indications are available.
 	 * <p>
-	 * 
+	 *
 	 * @return <code>true</code> if at least one indication is available,
 	 *         <code>false</code> otherwise
 	 */
@@ -155,7 +157,7 @@ public class CommandFilter implements NetworkFilter, RequestFilter
 	 * indication was added and this method call in such a way, that the original
 	 * indication is not available anymore (for example by removal or emptied queue), that
 	 * indication might be skipped or an empty QueueItem is returned.
-	 * 
+	 *
 	 * @return queue item containing cEMI frame indication
 	 */
 	public QueueItem getNextIndication()
@@ -173,17 +175,18 @@ public class CommandFilter implements NetworkFilter, RequestFilter
 	 * See {@link #getNextIndication()} for more details. In contrast to that method, this
 	 * method does not throw.
 	 */
+	@Override
 	public CEMILData request(final KNXAddress dst, final Configuration c)
 	{
 		if (!(dst instanceof GroupAddress))
 			return null;
-		final DatapointModel m = c.getDatapointModel();
+		final DatapointModel<?> m = c.getDatapointModel();
 		final Datapoint dp;
 		if (m != null && ((dp = m.get((GroupAddress) dst)) == null || dp.isStateBased()))
 			return null;
 		synchronized (indicationKeys) {
-			for (final Iterator i = indicationKeys.iterator(); i.hasNext();) {
-				final CacheObject co = (CacheObject) i.next();
+			for (final Iterator<CacheObject> i = indicationKeys.iterator(); i.hasNext();) {
+				final CacheObject co = i.next();
 				if (co.getKey().equals(dst)) {
 					i.remove();
 					return ((LDataObjectQueue) co).getItem().getFrame();
@@ -209,10 +212,11 @@ public class CommandFilter implements NetworkFilter, RequestFilter
 	 * 10 items.<br>
 	 * For uniform handling an accepted frame is always buffered with the L-data
 	 * indication message code.
-	 * 
+	 *
 	 * @param frame {@inheritDoc}
 	 * @param c {@inheritDoc}
 	 */
+	@Override
 	public void accept(final CEMI frame, final Configuration c)
 	{
 		final Cache cache = c.getCache();
@@ -224,7 +228,7 @@ public class CommandFilter implements NetworkFilter, RequestFilter
 		final GroupAddress dst = (GroupAddress) f.getDestination();
 		// check if we have a datapoint model, whether it contains the address,
 		// and datapoint is command based
-		final DatapointModel m = c.getDatapointModel();
+		final DatapointModel<?> m = c.getDatapointModel();
 		final Datapoint dp;
 		if (m != null && ((dp = m.get(dst)) == null || dp.isStateBased()))
 			return;
@@ -233,12 +237,12 @@ public class CommandFilter implements NetworkFilter, RequestFilter
 		final int svc = d[0] & 0x03 | d[1] & 0xC0;
 		if (svc != 0x40 && svc != 0x80)
 			return;
-		CEMILData copy;
+		final CEMILData copy;
 		try {
 			copy = (CEMILData) CEMIFactory.create(CEMILData.MC_LDATA_IND, d, f);
 		}
 		catch (final KNXFormatException e) {
-			NetworkBuffer.logger.error("preparing message for buffer failed", e);
+			LogService.getLogger("calimero").error("create L_Data.ind for network buffer: {}", f, e);
 			return;
 		}
 		CacheObject co = cache.get(dst);

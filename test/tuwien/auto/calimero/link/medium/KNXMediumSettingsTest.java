@@ -37,7 +37,7 @@
 package tuwien.auto.calimero.link.medium;
 
 import junit.framework.TestCase;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 
 /**
  * @author B. Malinowsky
@@ -55,6 +55,7 @@ public class KNXMediumSettingsTest extends TestCase
 	/* (non-Javadoc)
 	 * @see junit.framework.TestCase#setUp()
 	 */
+	@Override
 	protected void setUp() throws Exception
 	{
 		super.setUp();
@@ -63,6 +64,7 @@ public class KNXMediumSettingsTest extends TestCase
 	/* (non-Javadoc)
 	 * @see junit.framework.TestCase#tearDown()
 	 */
+	@Override
 	protected void tearDown() throws Exception
 	{
 		super.tearDown();
@@ -95,7 +97,7 @@ public class KNXMediumSettingsTest extends TestCase
 		}
 	}
 
-	private void testCreate(final int medium, final Class type)
+	private void testCreate(final int medium, final Class<? extends KNXMediumSettings> type)
 	{
 		final KNXMediumSettings settings = KNXMediumSettings.create(medium, null);
 		assertEquals(settings.getClass(), type);

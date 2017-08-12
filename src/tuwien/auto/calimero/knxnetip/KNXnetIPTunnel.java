@@ -36,30 +36,40 @@
 
 package tuwien.auto.calimero.knxnetip;
 
+import static tuwien.auto.calimero.knxnetip.KNXnetIPTunnel.TunnelingLayer.BusMonitorLayer;
+import static tuwien.auto.calimero.knxnetip.KNXnetIPTunnel.TunnelingLayer.RawLayer;
+
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 import tuwien.auto.calimero.CloseEvent;
+import tuwien.auto.calimero.DataUnitBuilder;
+import tuwien.auto.calimero.KNXException;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXIllegalStateException;
+import tuwien.auto.calimero.KNXInvalidResponseException;
+import tuwien.auto.calimero.KNXRemoteException;
+import tuwien.auto.calimero.KNXTimeoutException;
 import tuwien.auto.calimero.cemi.CEMI;
 import tuwien.auto.calimero.cemi.CEMIBusMon;
 import tuwien.auto.calimero.cemi.CEMILData;
-import tuwien.auto.calimero.exception.KNXException;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.exception.KNXIllegalStateException;
-import tuwien.auto.calimero.exception.KNXInvalidResponseException;
-import tuwien.auto.calimero.exception.KNXRemoteException;
-import tuwien.auto.calimero.exception.KNXTimeoutException;
+import tuwien.auto.calimero.cemi.CEMILDataEx;
+import tuwien.auto.calimero.cemi.CEMILDataEx.AddInfo;
 import tuwien.auto.calimero.knxnetip.servicetype.ErrorCodes;
 import tuwien.auto.calimero.knxnetip.servicetype.KNXnetIPHeader;
 import tuwien.auto.calimero.knxnetip.servicetype.PacketHelper;
 import tuwien.auto.calimero.knxnetip.servicetype.ServiceAck;
 import tuwien.auto.calimero.knxnetip.servicetype.ServiceRequest;
 import tuwien.auto.calimero.knxnetip.util.TunnelCRI;
-import tuwien.auto.calimero.log.LogLevel;
+import tuwien.auto.calimero.log.LogService.LogLevel;
 
 /**
  * KNXnet/IP connection for KNX tunneling.
@@ -78,55 +88,74 @@ public class KNXnetIPTunnel extends ClientConnection
 	 */
 	public static final int TUNNEL_CONNECTION = 0x04;
 
-	/**
-	 * Tunneling on busmonitor layer, establishes a busmonitor tunnel to the KNX network.
-	 */
-	public static final int BUSMONITOR_LAYER = 0x80;
 
-	/**
-	 * Tunneling on link layer, establishes a link layer tunnel to the KNX network.
-	 */
-	public static final int LINK_LAYER = 0x02;
+	public enum TunnelingLayer {
+		/**
+		 * Tunneling on busmonitor layer, establishes a busmonitor tunnel to the KNX network.
+		 */
+		BusMonitorLayer(0x80),
+		/**
+		 * Tunneling on link layer, establishes a link layer tunnel to the KNX network.
+		 */
+		LinkLayer(0x02),
+		/**
+		 * Tunneling on raw layer, establishes a raw tunnel to the KNX network.
+		 */
+		RawLayer(0x04);
 
-	/**
-	 * Tunneling on raw layer, establishes a raw tunnel to the KNX network.
-	 */
-	public static final int RAW_LAYER = 0x04;
+		private final int code;
+
+		public static TunnelingLayer from(final int layer)
+		{
+			for (final TunnelingLayer v : TunnelingLayer.values())
+				if (layer == v.code)
+					return v;
+			throw new KNXIllegalArgumentException("unspecified tunneling layer + 0x" + Integer.toHexString(layer));
+		}
+
+		TunnelingLayer(final int code) {
+			this.code = code;
+		}
+
+		public final int getCode() {
+			return code;
+		}
+	}
 
 	// client SHALL wait 1 second for acknowledgment response to a
 	// tunneling request from server
 	private static final int TUNNELING_REQ_TIMEOUT = 1;
 
-	private final int layer;
+	private final TunnelingLayer layer;
 
 	/**
 	 * Creates a new KNXnet/IP tunneling connection to a remote server.
 	 * <p>
-	 * Establishing a raw tunneling layer ({@link #RAW_LAYER}) is not supported yet.<br>
+	 * Establishing a raw tunneling layer (
+	 * {@link tuwien.auto.calimero.knxnetip.KNXnetIPTunnel.TunnelingLayer#RawLayer}) is not
+	 * supported yet.<br>
 	 *
-	 * @param knxLayer KNX tunneling layer (e.g. {@link #LINK_LAYER})
-	 * @param localEP specifies the local endpoint with the socket address to be used by
-	 *        the tunnel
+	 * @param knxLayer KNX tunneling layer (e.g. {@link TunnelingLayer#LinkLayer})
+	 * @param localEP specifies the local endpoint with the socket address to be used by the tunnel
 	 * @param serverCtrlEP control endpoint of the server to establish connection to
 	 * @param useNAT <code>true</code> to use a NAT (network address translation) aware
 	 *        communication mechanism, <code>false</code> to use the default way
 	 * @throws KNXException on socket communication error
 	 * @throws KNXTimeoutException on no connect response before connect timeout
-	 * @throws KNXRemoteException if response indicates an error condition at the server
-	 *         concerning the request
+	 * @throws KNXRemoteException if response indicates an error condition at the server concerning
+	 *         the request
 	 * @throws KNXInvalidResponseException if connect response is in wrong format
-	 * @throws InterruptedException on interrupted thread while creating tunneling
-	 *         connection
+	 * @throws InterruptedException on interrupted thread while creating tunneling connection
 	 */
-	public KNXnetIPTunnel(final int knxLayer, final InetSocketAddress localEP,
+	public KNXnetIPTunnel(final TunnelingLayer knxLayer, final InetSocketAddress localEP,
 		final InetSocketAddress serverCtrlEP, final boolean useNAT) throws KNXException,
 		InterruptedException
 	{
 		super(KNXnetIPHeader.TUNNELING_REQ, KNXnetIPHeader.TUNNELING_ACK, 2, TUNNELING_REQ_TIMEOUT);
-		if (knxLayer == RAW_LAYER)
-			throw new KNXIllegalArgumentException("raw tunnel to KNX network not supported");
-		if (knxLayer != LINK_LAYER && knxLayer != BUSMONITOR_LAYER)
-			throw new KNXIllegalArgumentException("unknown KNX layer");
+		if (Objects.isNull(knxLayer))
+			throw new NullPointerException("Tunneling Layer");
+		if (knxLayer == RawLayer)
+			throw new KNXIllegalArgumentException("Raw tunnel to KNX network not supported: " + knxLayer);
 		layer = knxLayer;
 		connect(localEP, serverCtrlEP, new TunnelCRI(knxLayer), useNAT);
 	}
@@ -139,21 +168,24 @@ public class KNXnetIPTunnel extends ClientConnection
 	 * @param frame cEMI message to send, the expected cEMI type is according to the used
 	 *        tunneling layer
 	 */
-	public void send(final CEMI frame, final BlockingMode mode) throws KNXTimeoutException,
-		KNXConnectionClosedException
+	@Override
+	public void send(final CEMI frame, final BlockingMode mode)
+		throws KNXTimeoutException, KNXConnectionClosedException, InterruptedException
 	{
-		if (layer == BUSMONITOR_LAYER)
+		if (layer == BusMonitorLayer)
 			throw new KNXIllegalStateException("send not permitted in busmonitor mode");
 		if (!(frame instanceof CEMILData))
 			throw new KNXIllegalArgumentException("unsupported cEMI type " + frame.getClass());
 		super.send(frame, mode);
 	}
 
+	@Override
 	public String getName()
 	{
 		return "KNXnet/IP Tunneling " + super.getName();
 	}
 
+	@Override
 	protected boolean handleServiceType(final KNXnetIPHeader h, final byte[] data, final int offset,
 		final InetAddress src, final int port) throws KNXFormatException, IOException
 	{
@@ -168,88 +200,112 @@ public class KNXnetIPTunnel extends ClientConnection
 			return true;
 
 		final int seq = req.getSequenceNumber();
-		if (seq == ((getSeqRcv() + 1) & 0xFF)) {
-			// Workaround for missed request problem (not part of the knxnet/ip tunneling spec):
-			// we missed a single request, hence, the receive sequence is one behind. If the remote
-			// endpoint didn't terminate the connection, but continues to send requests, this workaround
-			// re-syncs with the sequence of the sender.
-			final String s = System.getProperty("calimero.knxnetip.tunneling.resyncSkippedRcvSeq");
-			final boolean resync = "".equals(s) || "true".equalsIgnoreCase(s);
-			if (resync) {
-				logger.error("tunneling request with rcv-seq " + seq + ", expected " + getSeqRcv()
-						+ " -> re-sync with server (1 tunneled msg lost)");
-				incSeqRcv();
-			}
-		}
+		final boolean expected = seq == getSeqRcv();
+		final boolean repeated = ((seq + 1) & 0xFF) == getSeqRcv();
 
-		if (seq == getSeqRcv() || ((seq + 1) & 0xFF) == getSeqRcv()) {
+		// send KNXnet/IP service ack
+		if (expected || repeated) {
 			final int status = h.getVersion() == KNXNETIP_VERSION_10 ? ErrorCodes.NO_ERROR
 					: ErrorCodes.VERSION_NOT_SUPPORTED;
-			final byte[] buf = PacketHelper.toPacket(new ServiceAck(serviceAck, channelId, seq,
-					status));
-			final DatagramPacket p = new DatagramPacket(buf, buf.length, dataEndpt.getAddress(),
-					dataEndpt.getPort());
+			final byte[] buf = PacketHelper.toPacket(new ServiceAck(serviceAck, channelId, seq, status));
+			final DatagramPacket p = new DatagramPacket(buf, buf.length, dataEndpt.getAddress(), dataEndpt.getPort());
 			socket.send(p);
 			if (status == ErrorCodes.VERSION_NOT_SUPPORTED) {
 				close(CloseEvent.INTERNAL, "protocol version changed", LogLevel.ERROR, null);
 				return true;
 			}
 		}
-		else
-			logger.warn("tunneling request with invalid rcv-seq " + seq + ", expected "
-					+ getSeqRcv());
-		if (seq == getSeqRcv()) {
-			incSeqRcv();
-			final CEMI cemi = req.getCEMI();
-			// leave if we are working with an empty (broken) service request
-			if (cemi == null)
-				return true;
+		else {
+			logger.warn("tunneling request with invalid rcv-seq {}, expected {}", seq, getSeqRcv());
+			return true;
+		}
 
-			final int mc = cemi.getMessageCode();
-			if (mc == CEMILData.MC_LDATA_IND || mc == CEMIBusMon.MC_BUSMON_IND)
-				fireFrameReceived(cemi);
-			else if (mc == CEMILData.MC_LDATA_CON) {
-				// invariant: notify listener before return from blocking send
-				logger.trace("received cEMI L-Data.con with req " + req.getSequenceNumber());
-				fireFrameReceived(cemi);
+		// ignore repeated tunneling requests
+		if (repeated) {
+			logger.debug("skip tunneling request with rcv-seq {} (already received)", seq);
+			return true;
+		}
 
-				synchronized (lock) {
-					final CEMILData ldata = (CEMILData) keepForCon;
-					if (ldata != null && internalState == CEMI_CON_PENDING) {
-						// check if address was set by server
-						final boolean emptySrc = ldata.getSource().getRawAddress() == 0;
-						final byte[] sent = unifyLData(ldata, emptySrc);
-						final byte[] recv = unifyLData(cemi, emptySrc);
+		// further process all expected tunneling requests
+		incSeqRcv();
+		final CEMI cemi = req.getCEMI();
+		// leave if we are working with an empty (broken) service request
+		if (cemi == null)
+			return true;
+
+		final int mc = cemi.getMessageCode();
+		if (mc == CEMILData.MC_LDATA_IND || mc == CEMIBusMon.MC_BUSMON_IND) {
+			logger.trace("received request seq {} (channel {}) cEMI {}", req.getSequenceNumber(), channelId,
+					DataUnitBuilder.toHex(cemi.toByteArray(), " "));
+			fireFrameReceived(cemi);
+		}
+		else if (mc == CEMILData.MC_LDATA_CON) {
+			// invariant: notify listener before return from blocking send
+			logger.debug("received request seq {} (channel {}) cEMI L-Data.con {}->{}", req.getSequenceNumber(),
+					channelId, ((CEMILData) cemi).getSource(), ((CEMILData) cemi).getDestination());
+			// TODO move notification to after we know it's a valid .con (we should keep it out of the lock, though)
+			fireFrameReceived(cemi);
+
+			synchronized (lock) {
+				final CEMILData ldata = (CEMILData) keepForCon;
+				if (ldata != null && internalState == CEMI_CON_PENDING) {
+					// check if address was set by server
+					final boolean emptySrc = ldata.getSource().getRawAddress() == 0;
+					final List<Integer> types = additionalInfoTypesOf(ldata);
+					final byte[] sent = unifyLData(ldata, emptySrc, types);
+					final byte[] recv = unifyLData(cemi, emptySrc, types);
+					if (Arrays.equals(recv, sent)) {
+						keepForCon = null;
+						setStateNotify(OK);
+					}
+					else {
+						// we could get a .con with its hop count already decremented by 1 (eibd does that)
+						// decrement hop count of sent for comparison
+						final int sendCount = ldata.getHopCount() - 1;
+						sent[3] = (byte) ((sent[3] & (0x8f)) | (sendCount << 4));
 						if (Arrays.equals(recv, sent)) {
 							keepForCon = null;
 							setStateNotify(OK);
-						}
-						else {
-							// we could get a .con with its hop count already decremented by 1
-							// decrement hop count of sent for comparison
-							final int sendCount = ldata.getHopCount() - 1;
-							sent[3] = (byte) ((sent[3] & (0x8f)) | (sendCount << 4));
-							if (Arrays.equals(recv, sent)) {
-								keepForCon = null;
-								setStateNotify(OK);
-								logger.info("received L-Data.con with hopcount decremented by 1 (sent "
-										+ (sendCount + 1) + ", got " + sendCount + ")");
-							}
+							logger.info("received L_Data.con with hop count decremented by 1 (sent {}, got {})",
+									sendCount + 1, sendCount);
 						}
 					}
 				}
 			}
-			else if (mc == CEMILData.MC_LDATA_REQ)
-				logger.warn("received L-Data request - ignored");
 		}
-		else
-			logger.info("skip tunneling request with rcv-seq " + seq + " (already received)");
+		else if (mc == CEMILData.MC_LDATA_REQ)
+			logger.warn("received L-Data request - ignored");
+
 		return true;
 	}
 
-	private byte[] unifyLData(final CEMI ldata, final boolean emptySrc)
+	private List<Integer> additionalInfoTypesOf(final CEMILData ldata)
 	{
-		final byte[] data = ldata.toByteArray();
+		if (ldata instanceof CEMILDataEx) {
+			final CEMILDataEx ext = (CEMILDataEx) ldata;
+			final List<AddInfo> info = ext.getAdditionalInfo();
+			return info.stream().map(AddInfo::getType).collect(Collectors.toList());
+		}
+		return Collections.emptyList();
+	}
+
+	// types parameter: a workaround introduced for the Gira server, which sometimes adds non-standard
+	// additional info. types provides the list of add.info types we want to keep, everything else is removed
+	private byte[] unifyLData(final CEMI ldata, final boolean emptySrc, final List<Integer> types)
+	{
+		final byte[] data;
+		if (ldata instanceof CEMILDataEx) {
+			final CEMILDataEx ext = ((CEMILDataEx) ldata);
+			// remove all add.infos that are not in the types list
+			ext.getAdditionalInfo().forEach(info -> {
+				if (!types.contains(info.getType())) {
+					logger.warn("remove L-Data additional info type {}: {}", info.getType(),
+							DataUnitBuilder.toHex(info.getInfo(), ""));
+					ext.removeAdditionalInfo(info.getType());
+				}
+			});
+		}
+		data = ldata.toByteArray();
 		// set msg code field 0
 		data[0] = 0;
 		// set ctrl1 field 0

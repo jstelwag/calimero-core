@@ -40,8 +40,8 @@ import java.io.ByteArrayInputStream;
 import java.util.BitSet;
 
 import tuwien.auto.calimero.DataUnitBuilder;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 
 /**
  * A cEMI device management message.
@@ -126,6 +126,8 @@ public class CEMIDevMgmt implements CEMI
 		// enforce non-instantiability
 		private ErrorCodes() {}
 	}
+
+	// ??? implement function properties
 
 	/**
 	 * Message code for property read request, code = {@value #MC_PROPREAD_REQ}.
@@ -315,7 +317,7 @@ public class CEMIDevMgmt implements CEMI
 		final int propID, final int startIndex, final int elements, final byte[] data)
 	{
 		this(msgCode, objType, objInstance, propID, startIndex, elements);
-		this.data = (byte[]) data.clone();
+		this.data = data.clone();
 	}
 
 	/**
@@ -338,6 +340,7 @@ public class CEMIDevMgmt implements CEMI
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.cemi.CEMI#getMessageCode()
 	 */
+	@Override
 	public final int getMessageCode()
 	{
 		return mc;
@@ -358,9 +361,10 @@ public class CEMIDevMgmt implements CEMI
 	 *
 	 * @return a copy of the data part in the message structure as byte array
 	 */
+	@Override
 	public final byte[] getPayload()
 	{
-		return (byte[]) data.clone();
+		return data.clone();
 	}
 
 	/**
@@ -483,6 +487,7 @@ public class CEMIDevMgmt implements CEMI
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.cemi.CEMI#getStructLength()
 	 */
+	@Override
 	public final int getStructLength()
 	{
 		return header + data.length;
@@ -491,6 +496,7 @@ public class CEMIDevMgmt implements CEMI
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.cemi.CEMI#toByteArray()
 	 */
+	@Override
 	public byte[] toByteArray()
 	{
 		final byte[] buf = new byte[header + data.length];
@@ -512,6 +518,7 @@ public class CEMIDevMgmt implements CEMI
 	/* (non-Javadoc)
 	 * @see java.lang.Object#toString()
 	 */
+	@Override
 	public String toString()
 	{
 		final StringBuffer buf = new StringBuffer(30);
@@ -544,7 +551,7 @@ public class CEMIDevMgmt implements CEMI
 		return buf.toString();
 	}
 
-	private void checkLength(final ByteArrayInputStream is, final int len) throws KNXFormatException
+	private static void checkLength(final ByteArrayInputStream is, final int len) throws KNXFormatException
 	{
 		if (is.available() < len)
 			throw new KNXFormatException("insufficient frame length", len);

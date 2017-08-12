@@ -36,27 +36,28 @@
 
 package tuwien.auto.calimero.link;
 
+import org.slf4j.Logger;
+
 import tuwien.auto.calimero.CloseEvent;
 import tuwien.auto.calimero.DataUnitBuilder;
 import tuwien.auto.calimero.FrameEvent;
 import tuwien.auto.calimero.GroupAddress;
 import tuwien.auto.calimero.IndividualAddress;
 import tuwien.auto.calimero.KNXAddress;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXTimeoutException;
 import tuwien.auto.calimero.Priority;
 import tuwien.auto.calimero.cemi.CEMI;
 import tuwien.auto.calimero.cemi.CEMIDevMgmt;
 import tuwien.auto.calimero.cemi.CEMIFactory;
 import tuwien.auto.calimero.cemi.CEMILData;
 import tuwien.auto.calimero.cemi.CEMILDataEx;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.exception.KNXTimeoutException;
+import tuwien.auto.calimero.cemi.RFMediumInfo;
 import tuwien.auto.calimero.link.medium.KNXMediumSettings;
 import tuwien.auto.calimero.link.medium.PLSettings;
 import tuwien.auto.calimero.link.medium.RFSettings;
 import tuwien.auto.calimero.link.medium.TPSettings;
-import tuwien.auto.calimero.log.LogLevel;
-import tuwien.auto.calimero.log.LogManager;
 import tuwien.auto.calimero.log.LogService;
 
 /**
@@ -71,22 +72,25 @@ import tuwien.auto.calimero.log.LogService;
  * a subtype uses the KNXListener {@link AbstractLink#notifier} as connection listener.
  * <p>
  * In general, once a link has been closed, it is not available for further link communication and
- * cannot be reopened.
+ * cannot be reopened. For many use cases, a {@link Connector} is useful for creating KNX network
+ * links.
  *
  * @author B. Malinowsky
  * @see KNXNetworkLinkIP
  * @see KNXNetworkLinkFT12
+ * @see KNXNetworkLinkUsb
+ * @see Connector
  */
 public abstract class AbstractLink implements KNXNetworkLink
 {
 	/** Logger for this link instance. */
-	protected final LogService logger;
+	protected final Logger logger;
 
 	/**
 	 * Listener and notifier of KNX link events, add as connection listener to the underlying
 	 * protocol during initialization.
 	 */
-	protected final EventNotifier notifier;
+	protected final EventNotifier<NetworkLinkListener> notifier;
 
 	/** The message format to generate: cEMI or EMI1/EMI2. */
 	protected boolean cEMI = true;
@@ -97,23 +101,30 @@ public abstract class AbstractLink implements KNXNetworkLink
 	 */
 	protected boolean sendCEmiAsByteArray;
 
-	final Object conn;
-
 	private final String name;
 	private volatile boolean closed;
 	private volatile int hopCount = 6;
 	private KNXMediumSettings medium;
 
-	private final class LinkNotifier extends EventNotifier
+	final AutoCloseable conn;
+
+	private final class LinkNotifier extends EventNotifier<NetworkLinkListener>
 	{
 		LinkNotifier()
 		{
 			super(AbstractLink.this, AbstractLink.this.logger);
 		}
 
+		@Override
 		public void frameReceived(final FrameEvent e)
 		{
 			try {
+				// with EMI1 frames, there is the possibility we receive some left-over Get-Value responses
+				// from BCU switching during link setup, silently discard them
+				final byte[] emi1 = e.getFrameBytes();
+				if (emi1 != null && BcuSwitcher.isEmi1GetValue(emi1[0] & 0xff))
+					return;
+
 				final CEMI cemi = onReceive(e);
 				if (cemi instanceof CEMIDevMgmt) {
 					// XXX check .con correctly (required for setting cEMI link layer mode)
@@ -130,47 +141,42 @@ public abstract class AbstractLink implements KNXNetworkLink
 				final CEMILData f = (CEMILData) cemi;
 				final int mc = f.getMessageCode();
 				if (mc == CEMILData.MC_LDATA_IND) {
-					addEvent(new Indication(new FrameEvent(source, f)));
-					logger.trace("indication from " + f.getSource());
+					addEvent(l -> l.indication(new FrameEvent(source, f)));
+					logger.debug("indication {}", f.toString());
 				}
 				else if (mc == CEMILData.MC_LDATA_CON) {
-					addEvent(new Confirmation(new FrameEvent(source, f)));
-					logger.trace("confirmation of " + f.getDestination());
+					addEvent(l -> l.confirmation(new FrameEvent(source, f)));
+					logger.debug("confirmation of {}", f.getDestination());
 				}
 				else
-					logger.warn("unspecified frame event - ignored, msg code = 0x"
-							+ Integer.toHexString(mc));
+					logger.warn("unspecified frame event - ignored, msg code = 0x" + Integer.toHexString(mc));
 			}
-			catch (final KNXFormatException kfe) {
-				logger.warn("received unspecified frame " +
-						DataUnitBuilder.toHex(e.getFrameBytes(), ""), kfe);
-			}
-			catch (final RuntimeException rte) {
-				logger.warn("received unspecified frame " +
-						DataUnitBuilder.toHex(e.getFrameBytes(), ""), rte);
+			catch (final KNXFormatException | RuntimeException ex) {
+				logger.warn("received unspecified frame {}", DataUnitBuilder.toHex(e.getFrameBytes(), ""), ex);
 			}
 		}
 
+		@Override
 		public void connectionClosed(final CloseEvent e)
 		{
 			((AbstractLink) source).closed = true;
 			super.connectionClosed(e);
 			logger.info("link closed");
-			LogManager.getManager().removeLogService(logger.getName());
 		}
 	};
 
 	/**
-	 * @param connection the connection object
+	 * @param connection if not <code>null</code>, the link object will close this resource as last
+	 *        action before returning from {@link #close()}, relinquishing any underlying resources
 	 * @param name the link name
 	 * @param settings medium settings of the accessed KNX network
 	 */
-	protected AbstractLink(final Object connection, final String name,
+	protected AbstractLink(final AutoCloseable connection, final String name,
 		final KNXMediumSettings settings)
 	{
 		conn = connection;
 		this.name = name;
-		logger = LogManager.getManager().getLogService("calimero.link." + getName());
+		logger = LogService.getLogger("calimero.link." + getName());
 		notifier = new LinkNotifier();
 		setKNXMedium(settings);
 		notifier.start();
@@ -186,11 +192,12 @@ public abstract class AbstractLink implements KNXNetworkLink
 	{
 		conn = null;
 		this.name = name;
-		logger = LogManager.getManager().getLogService("calimero.link." + getName());
+		logger = LogService.getLogger("calimero.link." + getName());
 		notifier = new LinkNotifier();
 		setKNXMedium(settings);
 	}
 
+	@Override
 	public final synchronized void setKNXMedium(final KNXMediumSettings settings)
 	{
 		if (settings == null)
@@ -201,21 +208,25 @@ public abstract class AbstractLink implements KNXNetworkLink
 		medium = settings;
 	}
 
+	@Override
 	public final synchronized KNXMediumSettings getKNXMedium()
 	{
 		return medium;
 	}
 
+	@Override
 	public void addLinkListener(final NetworkLinkListener l)
 	{
 		notifier.addListener(l);
 	}
 
+	@Override
 	public void removeLinkListener(final NetworkLinkListener l)
 	{
 		notifier.removeListener(l);
 	}
 
+	@Override
 	public final void setHopCount(final int count)
 	{
 		if (count < 0 || count > 7)
@@ -224,25 +235,29 @@ public abstract class AbstractLink implements KNXNetworkLink
 		logger.info("hop count set to " + count);
 	}
 
+	@Override
 	public final int getHopCount()
 	{
 		return hopCount;
 	}
 
+	@Override
 	public void sendRequest(final KNXAddress dst, final Priority p, final byte[] nsdu)
 		throws KNXTimeoutException, KNXLinkClosedException
 	{
 		send(CEMILData.MC_LDATA_REQ, dst, p, nsdu, false);
 	}
 
+	@Override
 	public void sendRequestWait(final KNXAddress dst, final Priority p, final byte[] nsdu)
 		throws KNXTimeoutException, KNXLinkClosedException
 	{
 		send(CEMILData.MC_LDATA_REQ, dst, p, nsdu, true);
 	}
 
-	public void send(final CEMILData msg, final boolean waitForCon) throws KNXTimeoutException,
-		KNXLinkClosedException
+	@Override
+	public void send(final CEMILData msg, final boolean waitForCon)
+		throws KNXTimeoutException, KNXLinkClosedException
 	{
 		if (closed)
 			throw new KNXLinkClosedException("link closed");
@@ -255,16 +270,19 @@ public abstract class AbstractLink implements KNXNetworkLink
 		onSend(msg.getDestination(), createEmi(msg), waitForCon);
 	}
 
+	@Override
 	public final String getName()
 	{
 		return name;
 	}
 
+	@Override
 	public final boolean isOpen()
 	{
 		return !closed;
 	}
 
+	@Override
 	public final void close()
 	{
 		synchronized (this) {
@@ -274,8 +292,14 @@ public abstract class AbstractLink implements KNXNetworkLink
 		}
 		onClose();
 		notifier.quit();
+		try {
+			if (conn != null)
+				conn.close();
+		}
+		catch (final Exception ignore) {}
 	}
 
+	@Override
 	public String toString()
 	{
 		return "link" + (closed ? " (closed) " : " ") + getName() + " " + medium + ", hopcount " + hopCount;
@@ -374,31 +398,25 @@ public abstract class AbstractLink implements KNXNetworkLink
 		if (medium instanceof PLSettings) {
 			final CEMILDataEx f = (CEMILDataEx) msg;
 			if (f.getAdditionalInfo(CEMILDataEx.ADDINFO_PLMEDIUM) == null)
-				f.addAdditionalInfo(CEMILDataEx.ADDINFO_PLMEDIUM,
-						((PLSettings) medium).getDomainAddress());
+				f.addAdditionalInfo(CEMILDataEx.ADDINFO_PLMEDIUM, ((PLSettings) medium).getDomainAddress());
 		}
 		else if (medium.getMedium() == KNXMediumSettings.MEDIUM_RF) {
 			final CEMILDataEx f = (CEMILDataEx) msg;
 			if (f.getAdditionalInfo(CEMILDataEx.ADDINFO_RFMEDIUM) == null) {
 				final RFSettings rf = (RFSettings) medium;
-				final byte[] sn = f.isDomainBroadcast() ? rf.getDomainAddress() : rf
-						.getSerialNumber();
-				// add-info: rf-info (0 ignores a lot), sn (6 bytes), lfn (=255:void)
-				final byte[] ai = new byte[] { 0, sn[0], sn[1], sn[2], sn[3], sn[4], sn[5],
-					(byte) 0xff };
+				final byte[] sn = f.isDomainBroadcast() ? rf.getDomainAddress() : rf.getSerialNumber();
+				final byte[] ai = new RFMediumInfo(true, rf.isUnidirectional(), sn, 255).getInfo();
 				f.addAdditionalInfo(CEMILDataEx.ADDINFO_RFMEDIUM, ai);
 				s = f.isDomainBroadcast() ? "(using domain address)" : "(using device SN)";
 			}
 		}
 		else
 			return;
-		if (logger.isLoggable(LogLevel.TRACE))
-			logger.trace("add cEMI additional info for " + medium.getMediumString() + " " + s);
+		logger.trace("add cEMI additional info for {} {}", medium.getMediumString(), s);
 	}
 
 	// Creates the target EMI format using L-Data message parameters
-	private byte[] createEmi(final int mc, final KNXAddress dst, final Priority p,
-		final byte[] nsdu)
+	private byte[] createEmi(final int mc, final KNXAddress dst, final Priority p, final byte[] nsdu)
 	{
 		if (cEMI)
 			return cEMI(mc, dst, p, nsdu).toByteArray();

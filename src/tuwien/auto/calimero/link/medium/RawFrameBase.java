@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2015 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -41,8 +41,8 @@ import java.io.ByteArrayInputStream;
 import tuwien.auto.calimero.GroupAddress;
 import tuwien.auto.calimero.IndividualAddress;
 import tuwien.auto.calimero.KNXAddress;
+import tuwien.auto.calimero.KNXFormatException;
 import tuwien.auto.calimero.Priority;
-import tuwien.auto.calimero.exception.KNXFormatException;
 
 /**
  * Implementation for raw frames with common used functionality in L-data and L-polldata
@@ -60,7 +60,6 @@ public abstract class RawFrameBase implements RawFrame
 {
 	/**
 	 * Frame type identifier.
-	 * <p>
 	 */
 	protected int type;
 
@@ -69,7 +68,6 @@ public abstract class RawFrameBase implements RawFrame
 
 	/**
 	 * Source address.
-	 * <p>
 	 */
 	protected IndividualAddress src;
 
@@ -80,31 +78,26 @@ public abstract class RawFrameBase implements RawFrame
 
 	/**
 	 * Is this an extended (<code>true</code>) or a standard frame (<code>false</code>).
-	 * <p>
 	 */
 	protected boolean ext;
 
 	/**
 	 * Frame repetition flag.
-	 * <p>
 	 */
 	protected boolean repetition;
 
 	/**
 	 * Frame priority.
-	 * <p>
 	 */
 	protected Priority p;
 
 	/**
 	 * Frame hop count.
-	 * <p>
 	 */
 	protected int hopcount;
 
 	/**
 	 * Frame checksum.
-	 * <p>
 	 */
 	protected int fcs;
 
@@ -115,9 +108,7 @@ public abstract class RawFrameBase implements RawFrame
 	 */
 	protected byte[] tpdu;
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.link.medium.RawFrame#getFrameType()
-	 */
+	@Override
 	public final int getFrameType()
 	{
 		return type;
@@ -188,7 +179,7 @@ public abstract class RawFrameBase implements RawFrame
 	 */
 	public final byte[] getTPDU()
 	{
-		return tpdu == null ? null : (byte[]) tpdu.clone();
+		return tpdu == null ? null : tpdu.clone();
 	}
 
 	/**
@@ -206,9 +197,7 @@ public abstract class RawFrameBase implements RawFrame
 		return fcs;
 	}
 
-	/* (non-Javadoc)
-	 * @see java.lang.Object#toString()
-	 */
+	@Override
 	public String toString()
 	{
 		final StringBuffer sb = new StringBuffer();

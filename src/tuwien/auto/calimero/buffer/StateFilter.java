@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2011 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -45,6 +45,7 @@ import java.util.Map;
 
 import tuwien.auto.calimero.GroupAddress;
 import tuwien.auto.calimero.KNXAddress;
+import tuwien.auto.calimero.KNXFormatException;
 import tuwien.auto.calimero.buffer.Configuration.NetworkFilter;
 import tuwien.auto.calimero.buffer.Configuration.RequestFilter;
 import tuwien.auto.calimero.buffer.cache.Cache;
@@ -59,7 +60,7 @@ import tuwien.auto.calimero.datapoint.Datapoint;
 import tuwien.auto.calimero.datapoint.DatapointMap;
 import tuwien.auto.calimero.datapoint.DatapointModel;
 import tuwien.auto.calimero.datapoint.StateDP;
-import tuwien.auto.calimero.exception.KNXFormatException;
+import tuwien.auto.calimero.log.LogService;
 
 /**
  * Predefined filter for filtering KNX messages of datapoints with state semantic into the
@@ -83,7 +84,7 @@ import tuwien.auto.calimero.exception.KNXFormatException;
  * message.<br>
  * To reflect subsequent changes of the datapoint model in the filter, the filter has to
  * be reinitialized (using {@link #init(Configuration)}.
- * 
+ *
  * @author B. Malinowsky
  */
 public class StateFilter implements NetworkFilter, RequestFilter
@@ -91,18 +92,20 @@ public class StateFilter implements NetworkFilter, RequestFilter
 	// contains cross references of datapoints: which datapoint (key, of
 	// type KNXAddress) invalidates/updates which datapoints (value,
 	// of type List with GroupAddress entries)
-	private Map invalidate;
-	private Map update;
+	private Map<KNXAddress, List<GroupAddress>> invalidate;
+	private Map<KNXAddress, List<GroupAddress>> update;
 
 	// keep a reference to a notifying model used by the change listener
-	private DatapointModel model;
+	private DatapointModel<? extends Datapoint> model;
 	private final ChangeListener cl = new ChangeListener()
 	{
 		/**
 		 * @param m
 		 * @param dp
 		 */
-		public void onDatapointRemoved(final DatapointModel m, final Datapoint dp)
+		@Override
+		public void onDatapointRemoved(final DatapointModel<? extends Datapoint> m,
+			final Datapoint dp)
 		{
 			if (dp instanceof StateDP)
 				destroyReferences((StateDP) dp);
@@ -112,7 +115,8 @@ public class StateFilter implements NetworkFilter, RequestFilter
 		 * @param m
 		 * @param dp
 		 */
-		public void onDatapointAdded(final DatapointModel m, final Datapoint dp)
+		@Override
+		public void onDatapointAdded(final DatapointModel<? extends Datapoint> m, final Datapoint dp)
 		{
 			if (dp instanceof StateDP)
 				createReferences((StateDP) dp);
@@ -121,7 +125,6 @@ public class StateFilter implements NetworkFilter, RequestFilter
 
 	/**
 	 * Creates a new state based filter.
-	 * <p>
 	 */
 	public StateFilter()
 	{}
@@ -130,6 +133,7 @@ public class StateFilter implements NetworkFilter, RequestFilter
 	 * @see tuwien.auto.calimero.buffer.Configuration.NetworkFilter#init
 	 * (tuwien.auto.calimero.buffer.Configuration)
 	 */
+	@Override
 	public void init(final Configuration c)
 	{
 		// check if we have a current model which emits change notifications
@@ -137,7 +141,7 @@ public class StateFilter implements NetworkFilter, RequestFilter
 			final ChangeNotifier notifier = (ChangeNotifier) model;
 			notifier.removeChangeListener(cl);
 		}
-		final DatapointModel m = c.getDatapointModel();
+		final DatapointModel<?> m = c.getDatapointModel();
 		if (m instanceof ChangeNotifier) {
 			model = m;
 			final ChangeNotifier notifier = (ChangeNotifier) m;
@@ -165,10 +169,11 @@ public class StateFilter implements NetworkFilter, RequestFilter
 	 * <p>
 	 * If update and invalidation information is available, other dependent datapoint
 	 * state values will be updated or invalidated appropriately.
-	 * 
+	 *
 	 * @param frame {@inheritDoc}
 	 * @param c {@inheritDoc}
 	 */
+	@Override
 	public void accept(final CEMI frame, final Configuration c)
 	{
 		final Cache cache = c.getCache();
@@ -179,7 +184,7 @@ public class StateFilter implements NetworkFilter, RequestFilter
 		if (!(f.getDestination() instanceof GroupAddress))
 			return;
 		final GroupAddress dst = (GroupAddress) f.getDestination();
-		final DatapointModel m = c.getDatapointModel();
+		final DatapointModel<?> m = c.getDatapointModel();
 		Datapoint dp = null;
 		if (m != null && ((dp = m.get(dst)) == null || !dp.isStateBased()))
 			return;
@@ -197,7 +202,7 @@ public class StateFilter implements NetworkFilter, RequestFilter
 				copy = (CEMILData) CEMIFactory.create(CEMILData.MC_LDATA_IND, d, f);
 			}
 			catch (final KNXFormatException e) {
-				NetworkBuffer.logger.error("preparing message for buffer failed", e);
+				LogService.getLogger("calimero").error("create L_Data.ind for network buffer: {}", f, e);
 				return;
 			}
 		}
@@ -218,7 +223,7 @@ public class StateFilter implements NetworkFilter, RequestFilter
 				copy = new CEMILData(copy.getMessageCode(), copy.getSource(),
 						copy.getDestination(), copy.getPayload(), copy.getPriority(), false, hops);
 		}
-		
+
 		// put into cache object
 		CacheObject co = cache.get(dst);
 		if (co != null)
@@ -238,6 +243,7 @@ public class StateFilter implements NetworkFilter, RequestFilter
 	 * @see tuwien.auto.calimero.buffer.Configuration.RequestFilter#request(
 	 * tuwien.auto.calimero.KNXAddress, tuwien.auto.calimero.buffer.Configuration)
 	 */
+	@Override
 	public CEMILData request(final KNXAddress dst, final Configuration c)
 	{
 		final Cache cache = c.getCache();
@@ -248,7 +254,7 @@ public class StateFilter implements NetworkFilter, RequestFilter
 			return null;
 		// check if there is an expiration timeout for a state based value
 		final Datapoint dp;
-		final DatapointModel m = c.getDatapointModel();
+		final DatapointModel<?> m = c.getDatapointModel();
 		if (m != null && (dp = m.get((GroupAddress) dst)) != null && dp.isStateBased()) {
 			final int t = ((StateDP) dp).getExpirationTimeout() * 1000;
 			if (t != 0 && System.currentTimeMillis() > o.getTimestamp() + t)
@@ -260,9 +266,9 @@ public class StateFilter implements NetworkFilter, RequestFilter
 	private void update(final CEMILData f, final Cache c)
 	{
 		if (update != null) {
-			final List upd = (List) update.get(f.getDestination());
+			final List<GroupAddress> upd = update.get(f.getDestination());
 			if (upd != null)
-				for (final Iterator i = upd.iterator(); i.hasNext();) {
+				for (final Iterator<GroupAddress> i = upd.iterator(); i.hasNext();) {
 					final CacheObject co = c.get(i.next());
 					if (co != null)
 						((LDataObject) co).setFrame(CEMIFactory.create(null,
@@ -274,24 +280,24 @@ public class StateFilter implements NetworkFilter, RequestFilter
 	private void invalidate(final CEMILData f, final Cache c)
 	{
 		if (invalidate != null) {
-			final List inv = (List) invalidate.get(f.getDestination());
+			final List<GroupAddress> inv = invalidate.get(f.getDestination());
 			if (inv != null)
-				for (final Iterator i = inv.iterator(); i.hasNext();)
+				for (final Iterator<GroupAddress> i = inv.iterator(); i.hasNext();)
 					c.remove(i.next());
 		}
 	}
 
-	private void createReferences(final DatapointModel m)
+	private void createReferences(final DatapointModel<? extends Datapoint> m)
 	{
-		invalidate = new HashMap();
-		update = new HashMap();
-		final Collection c = ((DatapointMap) m).getDatapoints();
+		invalidate = new HashMap<>();
+		update = new HashMap<>();
+		final Collection<? extends Datapoint> c = ((DatapointMap<? extends Datapoint>) m)
+				.getDatapoints();
 		synchronized (c) {
-			for (final Iterator i = c.iterator(); i.hasNext();) {
-				try {
-					createReferences((StateDP) i.next());
-				}
-				catch (final ClassCastException ignore) {}
+			for (final Iterator<? extends Datapoint> i = c.iterator(); i.hasNext();) {
+				final Datapoint dp = i.next();
+				if (dp instanceof StateDP)
+					createReferences((StateDP) dp);
 			}
 		}
 	}
@@ -302,14 +308,14 @@ public class StateFilter implements NetworkFilter, RequestFilter
 		createReferences(update, dp.getAddresses(true), dp.getMainAddress());
 	}
 
-	private void createReferences(final Map map, final Collection forAddr,
-		final GroupAddress toAddr)
+	private void createReferences(final Map<KNXAddress, List<GroupAddress>> map,
+		final Collection<GroupAddress> forAddr, final GroupAddress toAddr)
 	{
-		for (final Iterator i = forAddr.iterator(); i.hasNext();) {
-			final Object o = i.next();
-			List l = (List) map.get(o);
+		for (final Iterator<GroupAddress> i = forAddr.iterator(); i.hasNext();) {
+			final GroupAddress ga = i.next();
+			List<GroupAddress> l = map.get(ga);
 			if (l == null)
-				map.put(o, l = new ArrayList());
+				map.put(ga, l = new ArrayList<>());
 			l.add(toAddr);
 		}
 	}
@@ -320,16 +326,16 @@ public class StateFilter implements NetworkFilter, RequestFilter
 		destroyReferences(update, dp.getAddresses(true), dp.getMainAddress());
 	}
 
-	private void destroyReferences(final Map map, final Collection forAddr,
-		final GroupAddress toAddr)
+	private void destroyReferences(final Map<KNXAddress, List<GroupAddress>> map,
+		final Collection<GroupAddress> forAddr, final GroupAddress toAddr)
 	{
-		for (final Iterator i = forAddr.iterator(); i.hasNext();) {
-			final Object o = i.next();
-			final List l = (List) map.get(o);
+		for (final Iterator<GroupAddress> i = forAddr.iterator(); i.hasNext();) {
+			final GroupAddress ga = i.next();
+			final List<GroupAddress> l = map.get(ga);
 			if (l != null) {
 				l.remove(toAddr);
 				if (l.isEmpty())
-					map.remove(o);
+					map.remove(ga);
 			}
 		}
 	}

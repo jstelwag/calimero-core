@@ -43,13 +43,13 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 
 import tuwien.auto.calimero.CloseEvent;
-import tuwien.auto.calimero.exception.KNXException;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.exception.KNXIllegalStateException;
-import tuwien.auto.calimero.exception.KNXInvalidResponseException;
-import tuwien.auto.calimero.exception.KNXRemoteException;
-import tuwien.auto.calimero.exception.KNXTimeoutException;
+import tuwien.auto.calimero.KNXException;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXIllegalStateException;
+import tuwien.auto.calimero.KNXInvalidResponseException;
+import tuwien.auto.calimero.KNXRemoteException;
+import tuwien.auto.calimero.KNXTimeoutException;
 import tuwien.auto.calimero.knxnetip.servicetype.ConnectRequest;
 import tuwien.auto.calimero.knxnetip.servicetype.ConnectResponse;
 import tuwien.auto.calimero.knxnetip.servicetype.ConnectionstateRequest;
@@ -62,8 +62,8 @@ import tuwien.auto.calimero.knxnetip.servicetype.PacketHelper;
 import tuwien.auto.calimero.knxnetip.servicetype.ServiceAck;
 import tuwien.auto.calimero.knxnetip.util.CRI;
 import tuwien.auto.calimero.knxnetip.util.HPAI;
-import tuwien.auto.calimero.log.LogLevel;
-import tuwien.auto.calimero.log.LogManager;
+import tuwien.auto.calimero.log.LogService;
+import tuwien.auto.calimero.log.LogService.LogLevel;
 
 /**
  * Base implementation for client tunneling, device management, and routing.
@@ -141,8 +141,7 @@ abstract class ClientConnection extends ConnectionBase
 			throw new KNXIllegalArgumentException("server control endpoint cannot be a multicast address ("
 					+ ctrlEndpt.getAddress().getHostAddress() + ")");
 		useNat = useNAT;
-		logger = LogManager.getManager().getLogService(getName());
-		Exception thrown = null;
+		logger = LogService.getLogger("calimero.knxnetip." + getName());
 		try {
 			// if we allow localEP to be null, we would create an unbound socket
 			if (localEP == null)
@@ -150,48 +149,39 @@ abstract class ClientConnection extends ConnectionBase
 			socket = new DatagramSocket(localEP);
 			ctrlSocket = socket;
 
-			logger.info("establish connection from " + socket.getLocalSocketAddress()
-				+ " to " + ctrlEndpt);
+			logger.info("establish connection from " + socket.getLocalSocketAddress() + " to " + ctrlEndpt);
 			// HPAI throws if wildcard local address (0.0.0.0) is supplied
-			final HPAI hpai = new HPAI(HPAI.IPV4_UDP, useNat ? null
-				: (InetSocketAddress) socket.getLocalSocketAddress());
+			final HPAI hpai = new HPAI(HPAI.IPV4_UDP,
+					useNat ? null : (InetSocketAddress) socket.getLocalSocketAddress());
 			final byte[] buf = PacketHelper.toPacket(new ConnectRequest(cri, hpai, hpai));
-			final DatagramPacket p = new DatagramPacket(buf, buf.length, ctrlEndpt.getAddress(),
-					ctrlEndpt.getPort());
+			final DatagramPacket p = new DatagramPacket(buf, buf.length, ctrlEndpt.getAddress(), ctrlEndpt.getPort());
 			ctrlSocket.send(p);
 		}
-		catch (final IOException e) {
-			thrown = e;
-		}
-		catch (final SecurityException e) {
-			thrown = e;
-		}
-		if (thrown != null) {
+		catch (IOException | SecurityException e) {
 			if (socket != null)
 				socket.close();
-			logger.error("communication failure on connect", thrown);
+			logger.error("communication failure on connect", e);
 			if (localEP.getAddress().isLoopbackAddress())
-				logger.warn("try to specify the actual IP address of the local host");
-			LogManager.getManager().removeLogService(logger.getName());
-			throw new KNXException("on connect to " + serverCtrlEP, thrown);
+				logger.warn("local endpoint uses loopback address ({}), try with a different IP address",
+						localEP.getAddress());
+			throw new KNXException("on connect to " + serverCtrlEP + ": " + e.getMessage());
 		}
 
-		logger.trace("wait for connect response from " + ctrlEndpt + " ...");
+		logger.debug("wait for connect response from " + ctrlEndpt + " ...");
 		startReceiver();
 		try {
 			final boolean changed = waitForStateChange(CLOSED, CONNECT_REQ_TIMEOUT);
 			if (state == OK) {
 				heartbeat = new HeartbeatMonitor();
 				heartbeat.start();
-				logger.info("connection established");
+				logger.info("connection established (channel {})", channelId);
 				return;
 			}
 			final KNXException e;
 			if (!changed)
 				e = new KNXTimeoutException("timeout connecting to control endpoint " + ctrlEndpt);
 			else if (state == ACK_ERROR)
-				e = new KNXRemoteException("error response from control endpoint " + ctrlEndpt
-						+ ": " + status);
+				e = new KNXRemoteException("error response from control endpoint " + ctrlEndpt + ": " + status);
 			else
 				e = new KNXInvalidResponseException("invalid connect response from " + ctrlEndpt);
 			// quit, cleanup and notify user
@@ -204,6 +194,7 @@ abstract class ClientConnection extends ConnectionBase
 		}
 	}
 
+	@Override
 	protected void cleanup(final int initiator, final String reason, final LogLevel level,
 		final Throwable t)
 	{
@@ -214,7 +205,7 @@ abstract class ClientConnection extends ConnectionBase
 			cleanup = true;
 		}
 
-		logger.log(level, "close connection - " + reason, t);
+		LogService.log(logger, level, "close connection - " + reason, t);
 		// heartbeat was not necessarily used at all
 		if (heartbeat != null)
 			heartbeat.quit();
@@ -225,19 +216,15 @@ abstract class ClientConnection extends ConnectionBase
 		super.cleanup(initiator, reason, level, t);
 	}
 
-	/* (non-Javadoc)
-	* @see tuwien.auto.calimero.knxnetip.ConnectionBase#doExtraBlockingModes()
-	*/
+	@Override
 	void doExtraBlockingModes() throws KNXTimeoutException, InterruptedException
 	{
 		// blocking mode is wait for .con
 		// wait for incoming request with confirmation
-		waitForStateChange(ClientConnection.CEMI_CON_PENDING,
-			ClientConnection.CONFIRMATION_TIMEOUT);
+		waitForStateChange(ClientConnection.CEMI_CON_PENDING, ClientConnection.CONFIRMATION_TIMEOUT);
 		// throw on no answer
 		if (internalState == ClientConnection.CEMI_CON_PENDING) {
-			final KNXTimeoutException e = new KNXTimeoutException(
-					"no confirmation reply received for " + keepForCon);
+			final KNXTimeoutException e = new KNXTimeoutException("no confirmation reply received for " + keepForCon);
 			logger.warn("response timeout waiting for confirmation", e);
 			internalState = OK;
 			throw e;
@@ -251,6 +238,8 @@ abstract class ClientConnection extends ConnectionBase
 	 * @throws KNXFormatException
 	 * @throws IOException
 	 */
+	@SuppressWarnings("unused")
+	@Override
 	protected boolean handleServiceType(final KNXnetIPHeader h, final byte[] data,
 		final int offset, final InetAddress src, final int port) throws KNXFormatException,
 		IOException
@@ -271,11 +260,11 @@ abstract class ClientConnection extends ConnectionBase
 				// empty, we fall back to the IP address and port of the sender
 				if (useNat && (ip == null || ip.isAnyLocalAddress() || ep.getPort() == 0)) {
 					dataEndpt = new InetSocketAddress(src, port);
-					logger.trace("NAT aware mode: using server data endpoint " + dataEndpt);
+					logger.debug("NAT aware mode: using server data endpoint " + dataEndpt);
 				}
 				else {
 					dataEndpt = new InetSocketAddress(ip, ep.getPort());
-					logger.trace("using server-assigned data endpoint " + dataEndpt);
+					logger.debug("using server-assigned data endpoint " + dataEndpt);
 				}
 				checkVersion(h);
 				setStateNotify(OK);
@@ -323,6 +312,9 @@ abstract class ClientConnection extends ConnectionBase
 				// update state and notify our lock
 				setStateNotify(res.getStatus() == ErrorCodes.NO_ERROR ? CEMI_CON_PENDING
 						: ACK_ERROR);
+				if (logger.isTraceEnabled())
+					logger.trace("received service ack {} from {} (channel {})",
+							res.getSequenceNumber(), ctrlEndpt, channelId);
 				if (internalState == ACK_ERROR)
 					logger.warn("received service acknowledgment status " + res.getStatusString());
 			}
@@ -377,7 +369,6 @@ abstract class ClientConnection extends ConnectionBase
 		socket.close();
 		setState(CLOSED);
 		logger.error("establishing connection failed, " + thrown.getMessage());
-		LogManager.getManager().removeLogService(logger.getName());
 	}
 
 	private final class HeartbeatMonitor extends Thread
@@ -394,6 +385,7 @@ abstract class ClientConnection extends ConnectionBase
 			setDaemon(true);
 		}
 
+		@Override
 		public void run()
 		{
 			final byte[] buf = PacketHelper.toPacket(new ConnectionstateRequest(channelId,
@@ -458,7 +450,7 @@ abstract class ClientConnection extends ConnectionBase
 				notify();
 			}
 			if (!ok)
-				logger.warn("connection state response status: " + res.getStatusString());
+				logger.warn("connection state response: " + res.getStatusString());
 		}
 	}
 }

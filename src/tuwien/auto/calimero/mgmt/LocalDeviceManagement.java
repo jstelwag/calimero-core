@@ -36,6 +36,8 @@
 
 package tuwien.auto.calimero.mgmt;
 
+import static tuwien.auto.calimero.knxnetip.KNXnetIPConnection.BlockingMode.WaitForCon;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -44,14 +46,13 @@ import java.util.List;
 
 import tuwien.auto.calimero.CloseEvent;
 import tuwien.auto.calimero.FrameEvent;
+import tuwien.auto.calimero.KNXException;
+import tuwien.auto.calimero.KNXIllegalStateException;
+import tuwien.auto.calimero.KNXInvalidResponseException;
 import tuwien.auto.calimero.KNXListener;
+import tuwien.auto.calimero.KNXRemoteException;
+import tuwien.auto.calimero.cemi.CEMI;
 import tuwien.auto.calimero.cemi.CEMIDevMgmt;
-import tuwien.auto.calimero.exception.KNXException;
-import tuwien.auto.calimero.exception.KNXIllegalStateException;
-import tuwien.auto.calimero.exception.KNXInvalidResponseException;
-import tuwien.auto.calimero.exception.KNXRemoteException;
-import tuwien.auto.calimero.knxnetip.ConnectionBase;
-import tuwien.auto.calimero.knxnetip.KNXnetIPConnection;
 
 abstract class LocalDeviceManagement implements PropertyAdapter
 {
@@ -69,12 +70,14 @@ abstract class LocalDeviceManagement implements PropertyAdapter
 
 	protected final class KNXListenerImpl implements KNXListener
 	{
+		@Override
 		public void frameReceived(final FrameEvent e)
 		{
 			if (e.getFrame() instanceof CEMIDevMgmt)
 				frames.add(e.getFrame());
 		}
 
+		@Override
 		public void connectionClosed(final CloseEvent e)
 		{
 			if (listener == null)
@@ -87,12 +90,12 @@ abstract class LocalDeviceManagement implements PropertyAdapter
 
 	private static final int DEVICE_OBJECT = 0;
 
-	protected final ConnectionBase c;
+	protected final AutoCloseable c;
 
 	private final PropertyAdapterListener listener;
-	private final List frames = Collections.synchronizedList(new LinkedList());
+	private final List<CEMI> frames = Collections.synchronizedList(new LinkedList<>());
 	private volatile boolean serverReset;
-	private final List interfaceObjects = new ArrayList();
+	private final List<Pair> interfaceObjects = new ArrayList<>();
 
 	private final boolean checkRW;
 	private volatile boolean closed;
@@ -101,7 +104,7 @@ abstract class LocalDeviceManagement implements PropertyAdapter
 	private int lastPropIndex;
 	private int lastPid;
 
-	public LocalDeviceManagement(final ConnectionBase connection, final PropertyAdapterListener l,
+	LocalDeviceManagement(final AutoCloseable connection, final PropertyAdapterListener l,
 		final boolean queryWriteEnable)
 	{
 		c = connection;
@@ -109,7 +112,7 @@ abstract class LocalDeviceManagement implements PropertyAdapter
 		checkRW = queryWriteEnable;
 	}
 
-	void init() throws KNXException
+	void init() throws KNXException, InterruptedException
 	{
 		resetLastDescription();
 		try {
@@ -124,32 +127,35 @@ abstract class LocalDeviceManagement implements PropertyAdapter
 		}
 	}
 
+	@Override
 	public void setProperty(final int objIndex, final int pid, final int start, final int elements,
-		final byte[] data) throws KNXException
+		final byte[] data) throws KNXException, InterruptedException
 	{
 		if (closed)
 			throw new KNXIllegalStateException("adapter closed");
 		final int objectType = getObjectType(objIndex);
 		final int objectInstance = getObjectInstance(objIndex, objectType);
 		send(new CEMIDevMgmt(CEMIDevMgmt.MC_PROPWRITE_REQ, objectType, objectInstance, pid, start,
-				elements, data), KNXnetIPConnection.WAIT_FOR_CON);
+				elements, data), WaitForCon);
 		findFrame(CEMIDevMgmt.MC_PROPWRITE_CON);
 	}
 
+	@Override
 	public byte[] getProperty(final int objIndex, final int pid, final int start, final int elements)
-		throws KNXException
+		throws KNXException, InterruptedException
 	{
 		if (closed)
 			throw new KNXIllegalStateException("adapter closed");
 		final int objectType = getObjectType(objIndex);
 		final int objectInstance = getObjectInstance(objIndex, objectType);
 		send(new CEMIDevMgmt(CEMIDevMgmt.MC_PROPREAD_REQ, objectType, objectInstance, pid, start,
-				elements), KNXnetIPConnection.WAIT_FOR_CON);
+				elements), WaitForCon);
 		return findFrame(CEMIDevMgmt.MC_PROPREAD_CON);
 	}
 
+	@Override
 	public byte[] getDescription(final int objIndex, final int pid, final int propIndex)
-		throws KNXException
+		throws KNXException, InterruptedException
 	{
 		// imitate property description:
 		// oindex: PropertyAccess.PID.IO_LIST
@@ -202,11 +208,13 @@ abstract class LocalDeviceManagement implements PropertyAdapter
 			0 };
 	}
 
+	@Override
 	public boolean isOpen()
 	{
 		return !closed;
 	}
 
+	@Override
 	public void close()
 	{
 		if (!closed) {
@@ -218,7 +226,7 @@ abstract class LocalDeviceManagement implements PropertyAdapter
 		}
 	}
 
-	protected abstract void send(final CEMIDevMgmt frame, final Object mode) throws KNXException;
+	protected abstract void send(final CEMIDevMgmt frame, final Object mode) throws KNXException, InterruptedException;
 
 	protected byte[] findFrame(final int messageCode) throws KNXRemoteException
 	{
@@ -242,8 +250,8 @@ abstract class LocalDeviceManagement implements PropertyAdapter
 
 	protected int getObjectType(final int objIndex) throws KNXRemoteException
 	{
-		for (final Iterator i = interfaceObjects.iterator(); i.hasNext();) {
-			final Pair p = (Pair) i.next();
+		for (final Iterator<Pair> i = interfaceObjects.iterator(); i.hasNext();) {
+			final Pair p = i.next();
 			if (p.oindex == objIndex)
 				return p.otype;
 		}
@@ -254,17 +262,17 @@ abstract class LocalDeviceManagement implements PropertyAdapter
 	{
 		int instance = 0;
 		for (int i = 0; i <= objIndex; i++) {
-			final Pair p = (Pair) interfaceObjects.get(i);
+			final Pair p = interfaceObjects.get(i);
 			if (p.otype == objectType)
 				instance++;
 		}
 		return instance;
 	}
 
-	protected void initInterfaceObjects() throws KNXException
+	protected void initInterfaceObjects() throws KNXException, InterruptedException
 	{
 		send(new CEMIDevMgmt(CEMIDevMgmt.MC_PROPREAD_REQ, DEVICE_OBJECT, 1,
-				PropertyAccess.PID.IO_LIST, 0, 1), KNXnetIPConnection.WAIT_FOR_CON);
+				PropertyAccess.PID.IO_LIST, 0, 1), WaitForCon);
 		int objects = 0;
 		try {
 			final byte[] ret = findFrame(CEMIDevMgmt.MC_PROPREAD_CON);
@@ -277,7 +285,7 @@ abstract class LocalDeviceManagement implements PropertyAdapter
 			return;
 		}
 		send(new CEMIDevMgmt(CEMIDevMgmt.MC_PROPREAD_REQ, DEVICE_OBJECT, 1,
-				PropertyAccess.PID.IO_LIST, 1, objects), KNXnetIPConnection.WAIT_FOR_CON);
+				PropertyAccess.PID.IO_LIST, 1, objects), WaitForCon);
 		final byte[] ret = findFrame(CEMIDevMgmt.MC_PROPREAD_CON);
 		for (int i = 0; i < objects; ++i) {
 			final int objType = (ret[2 * i] & 0xff) << 8 | ret[2 * i + 1] & 0xff;

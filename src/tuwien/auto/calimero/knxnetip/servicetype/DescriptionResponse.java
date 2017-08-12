@@ -41,7 +41,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-import tuwien.auto.calimero.exception.KNXFormatException;
+import tuwien.auto.calimero.KNXFormatException;
 import tuwien.auto.calimero.knxnetip.util.DIB;
 import tuwien.auto.calimero.knxnetip.util.DeviceDIB;
 import tuwien.auto.calimero.knxnetip.util.IPConfigDIB;
@@ -189,9 +189,9 @@ public class DescriptionResponse extends ServiceType
 	 * @return the complete description information contained in this response, as list of
 	 *         description information blocks (DIBs)
 	 */
-	public final List getDescription()
+	public final List<DIB> getDescription()
 	{
-		final List l = new ArrayList();
+		final List<DIB> l = new ArrayList<>();
 		l.add(device);
 		l.add(suppfam);
 		if (config != null)
@@ -241,14 +241,34 @@ public class DescriptionResponse extends ServiceType
 		return mfr;
 	}
 
+	@Override
+	public boolean equals(final Object obj)
+	{
+		if (this == obj)
+			return true;
+		if (!(obj instanceof DescriptionResponse))
+			return false;
+		final DescriptionResponse other = (DescriptionResponse) obj;
+		// device DIB should suffice for equality
+		return device.equals(other.device);
+	}
+
+	@Override
+	public int hashCode()
+	{
+		final int prime = 17;
+		return prime * device.hashCode();
+	}
+
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.knxnetip.servicetype.ServiceType#getStructLength()
 	 */
+	@Override
 	int getStructLength()
 	{
 		int len = 0;
-		for (final Iterator i = getDescription().iterator(); i.hasNext();)
-			len += ((DIB) i.next()).getStructLength();
+		for (final Iterator<DIB> i = getDescription().iterator(); i.hasNext();)
+			len += i.next().getStructLength();
 		return len;
 	}
 
@@ -256,10 +276,11 @@ public class DescriptionResponse extends ServiceType
 	 * @see tuwien.auto.calimero.knxnetip.servicetype.ServiceType#toByteArray
 	 *      (java.io.ByteArrayOutputStream)
 	 */
+	@Override
 	byte[] toByteArray(final ByteArrayOutputStream os)
 	{
-		for (final Iterator i = getDescription().iterator(); i.hasNext();) {
-			final byte[] bytes = ((DIB) i.next()).toByteArray();
+		for (final Iterator<DIB> i = getDescription().iterator(); i.hasNext();) {
+			final byte[] bytes = i.next().toByteArray();
 			os.write(bytes, 0, bytes.length);
 		}
 		return os.toByteArray();

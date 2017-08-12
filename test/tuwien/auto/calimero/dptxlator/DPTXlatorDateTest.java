@@ -41,13 +41,10 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 
-import org.junit.Assert;
-
 import junit.framework.TestCase;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 import tuwien.auto.calimero.Util;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.log.LogManager;
 
 /**
  * Test for DPTXlatorDate.
@@ -76,22 +73,14 @@ public class DPTXlatorDateTest extends TestCase
 	/* (non-Javadoc)
 	 * @see junit.framework.TestCase#setUp()
 	 */
+	@Override
 	protected void setUp() throws Exception
 	{
 		super.setUp();
-		LogManager.getManager().addWriter("DPTXlator", Util.getLogWriter());
+		Util.setupLogging("DPTXlator");
 		t = new DPTXlatorDate(dpt);
 		// reset to default to not interfere with tests
 		DPTXlatorDate.useValueFormat(null);
-	}
-
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#tearDown()
-	 */
-	protected void tearDown() throws Exception
-	{
-		LogManager.getManager().removeWriter("DPTXlator", Util.getLogWriter());
-		super.tearDown();
 	}
 
 	/**
@@ -123,7 +112,7 @@ public class DPTXlatorDateTest extends TestCase
 		assertEquals(1, t.getDay());
 
 		t.setValues(values);
-		Assert.assertEquals(values.length, t.getAllValues().length);
+		assertEquals(values.length, t.getAllValues().length);
 		final String[] all = t.getAllValues();
 		Helper.assertSimilar(all, values);
 	}

@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2016 B. Malinowsky
+    Copyright (c) 2006, 2014 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -38,7 +38,7 @@ package tuwien.auto.calimero.dptxlator;
 
 import org.junit.Assert;
 
-import tuwien.auto.calimero.exception.KNXException;
+import tuwien.auto.calimero.KNXException;
 
 /**
  * @author B. Malinowsky
@@ -50,7 +50,6 @@ public final class Helper
 
 	/**
 	 * Assert similar for String array.
-	 * <p>
 	 *
 	 * @param expected expected result
 	 * @param actual actual result
@@ -80,7 +79,6 @@ public final class Helper
 	/**
 	 * Creates DPT translator for given dpts and sets the dpts lower and upper value in
 	 * the translator.
-	 * <p>
 	 *
 	 * @param dpts dpts to check in translator
 	 * @param testSimilarity <code>true</code> to check if getValue() of translator

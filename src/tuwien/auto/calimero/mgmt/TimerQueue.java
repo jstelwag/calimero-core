@@ -39,7 +39,7 @@ package tuwien.auto.calimero.mgmt;
 import java.util.ArrayList;
 import java.util.List;
 
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 
 
 /**
@@ -61,10 +61,10 @@ import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
 final class TimerQueue extends Thread
 {
 	// synchronize on notifiables as monitor for both notifiables and endTimes lists
-	private final List notifiables = new ArrayList();
-	private final List endTimes = new ArrayList();
+	private final List<Runnable> notifiables = new ArrayList<>();
+	private final List<Long> endTimes = new ArrayList<>();
 
-	public TimerQueue()
+	TimerQueue()
 	{
 		super("TimerQueue");
 		setDaemon(true);
@@ -73,6 +73,7 @@ final class TimerQueue extends Thread
 	/* (non-Javadoc)
 	 * @see java.lang.Thread#run()
 	 */
+	@Override
 	public void run()
 	{
 		try {
@@ -84,8 +85,8 @@ final class TimerQueue extends Thread
 						notifiables.wait();
 					}
 					else {
-						final Runnable next = (Runnable) notifiables.get(0);
-						final Long end = (Long) endTimes.get(0);
+						final Runnable next = notifiables.get(0);
+						final Long end = endTimes.get(0);
 						long remaining = end.longValue() - System.currentTimeMillis();
 						if (remaining > 0) {
 							notifiables.wait(remaining);
@@ -140,9 +141,10 @@ final class TimerQueue extends Thread
 		if (endTime <= 0 || notifiable == null)
 			throw new KNXIllegalArgumentException("submit to timer queue");
 		// we assume here the submitted end time is later than last entry in list
+		// TODO change this if we find out we have greatly varying time-outs
 		synchronized (notifiables) {
 			notifiables.add(notifiable);
-			endTimes.add(new Long(endTime));
+			endTimes.add(Long.valueOf(endTime));
 			notifiables.notify();
 		}
 	}

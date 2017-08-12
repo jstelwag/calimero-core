@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2015 B. Malinowsky
+    Copyright (c) 2015, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -38,11 +38,7 @@ package tuwien.auto.calimero;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
-import java.util.Formatter;
 
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.exception.KNXIllegalStateException;
 import tuwien.auto.calimero.link.medium.KNXMediumSettings;
 import tuwien.auto.calimero.link.medium.KnxIPSettings;
 import tuwien.auto.calimero.link.medium.PLSettings;
@@ -59,10 +55,10 @@ import tuwien.auto.calimero.link.medium.TPSettings;
  *
  * @author B. Malinowsky
  */
-public abstract class DeviceDescriptor
+public interface DeviceDescriptor
 {
-	static final int TYPE_SIZE = 2;
-	static final int TYPE2_SIZE = 14;
+	int TYPE_SIZE = 2;
+	int TYPE2_SIZE = 14;
 
 	/**
 	 * Construct a device descriptor by parsing raw data.
@@ -71,7 +67,7 @@ public abstract class DeviceDescriptor
 	 * @return a {@link DeviceDescriptor}
 	 * @throws KNXFormatException if the data does not contain a valid device descriptor
 	 */
-	public static DeviceDescriptor fromType(final byte[] data) throws KNXFormatException
+	static DeviceDescriptor fromType(final byte[] data) throws KNXFormatException
 	{
 		if (data.length == TYPE_SIZE)
 			return DD0.fromType0(data);
@@ -80,13 +76,13 @@ public abstract class DeviceDescriptor
 		throw new KNXFormatException("unknown device descriptor type of size " + data.length);
 	}
 
-	public abstract byte[] toByteArray();
+	byte[] toByteArray();
 
 	/**
 	 * The Device Descriptor Type 0 (DD0) format, providing the available mask versions for type 0.
 	 * The terminology 'mask version' is equivalent with DD0.
 	 */
-	public static final class DD0 extends DeviceDescriptor
+	final class DD0 implements DeviceDescriptor
 	{
 		/** */
 		public static final DD0 TYPE_0010 = new DD0(0x0010, "System 1 (BCU 1)");
@@ -160,9 +156,7 @@ public abstract class DeviceDescriptor
 		static {
 			// ensure our DD0 array is up-to-date with the declared mask versions
 			int i = 0;
-			final Field[] fields = DD0.class.getDeclaredFields();
-			for (int k = 0; k < fields.length; k++) {
-				final Field f = fields[k];
+			for (final Field f : DD0.class.getDeclaredFields()) {
 				final int mod = f.getModifiers();
 				if (Modifier.isStatic(mod) && f.getName().startsWith("TYPE_"))
 					++i;
@@ -197,8 +191,7 @@ public abstract class DeviceDescriptor
 		 */
 		public static DD0 fromType0(final int descriptor)
 		{
-			for (int i = 0; i < types.length; i++) {
-				final DD0 v = types[i];
+			for (final DD0 v : types) {
 				if (v.getMaskVersion() == descriptor)
 					return v;
 			}
@@ -214,8 +207,7 @@ public abstract class DeviceDescriptor
 		// ??? maybe public
 		static String getMaskVersionString(final int descriptor)
 		{
-			return new Formatter().format("%04X", new Object[] { new Integer(descriptor) })
-					.toString();
+			return String.format("%04X", descriptor);
 		}
 
 		private DD0(final int mask, final String profile)
@@ -296,18 +288,20 @@ public abstract class DeviceDescriptor
 			return profile;
 		}
 
+		@Override
 		public String toString()
 		{
 			return getMaskVersionString(mv) + " - " + getDeviceProfile();
 		}
 
+		@Override
 		public byte[] toByteArray()
 		{
 			return new byte[] { (byte) (mv >>> 8), (byte) mv };
 		}
 	}
 
-	public static final class DD2 extends DeviceDescriptor
+	final class DD2 implements DeviceDescriptor
 	{
 		private final byte[] d;
 
@@ -327,7 +321,7 @@ public abstract class DeviceDescriptor
 			if (descriptor.length != TYPE2_SIZE)
 				throw new KNXIllegalArgumentException("unspecified device descriptor type 2 using "
 						+ "length " + descriptor.length);
-			d = (byte[]) descriptor.clone();
+			d = descriptor.clone();
 		}
 
 		public DD2(final int appManufacturer, final int deviceType, final int version,
@@ -401,10 +395,9 @@ public abstract class DeviceDescriptor
 			return d[5] & 0x3f;
 		}
 
-		public static final int Channel1 = 0;
-		public static final int Channel2 = 1;
-		public static final int Channel3 = 2;
-		public static final int Channel4 = 3;
+		public enum Channel {
+			Channel1, Channel2, Channel3, Channel4
+		};
 
 		/**
 		 * The number of channels implemented in the device for the specified channel type.
@@ -412,9 +405,9 @@ public abstract class DeviceDescriptor
 		 * @param channelType the requested channel type
 		 * @return the number of channels, <code>1 &le; channels &le; 8</code>
 		 */
-		public int getChannels(final int channelType)
+		public int getChannels(final Channel channelType)
 		{
-			final int offset = channelType * 2;
+			final int offset = channelType.ordinal() * 2;
 			return (get16Bits(6 + offset) >> 13) + 1;
 		}
 
@@ -422,20 +415,110 @@ public abstract class DeviceDescriptor
 		 * @param channelType the requested channel type
 		 * @return the 13 bit channel code of the specified channel type
 		 */
-		public int getChannelCode(final int channelType)
+		public int getChannelCode(final Channel channelType)
 		{
-			final int offset = channelType * 2;
+			final int offset = channelType.ordinal() * 2;
 			return get16Bits(6 + offset) & 0x1fff;
 		}
 
+		// ??? maybe add, maybe not
+//		/**
+//		 * The number of channels implemented in the device for channel 1.
+//		 *
+//		 * @return number of channels, <code>1 &le; channels &le; 8</code>
+//		 */
+//		public int getChannel1Channels()
+//		{
+//			return (get16Bits(6) >> 13) + 1;
+//		}
+//
+//		/**
+//		 * @return the 13 bit channel code of channel 1
+//		 */
+//		public int getChannel1Code()
+//		{
+//			return get16Bits(6) & 0x1fff;
+//		}
+//
+//		public int getChannelInfo2()
+//		{
+//			return get16Bits(8);
+//		}
+//
+//		/**
+//		 * The number of channels implemented in the device for channel 2.
+//		 *
+//		 * @return number of channels, <code>1 &le; channels &le; 8</code>
+//		 */
+//		public int getChannel2Channels()
+//		{
+//			return (get16Bits(8) >> 13) + 1;
+//		}
+//
+//		/**
+//		 * @return the 13 bit channel code of channel 2
+//		 */
+//		public int getChannel2Code()
+//		{
+//			return get16Bits(8) & 0x1fff;
+//		}
+//
+//		public int getChannelInfo3()
+//		{
+//			return get16Bits(10);
+//		}
+//
+//		/**
+//		 * The number of channels implemented in the device for channel 3.
+//		 *
+//		 * @return number of channels, <code>1 &le; channels &le; 8</code>
+//		 */
+//		public int getChannel3Channels()
+//		{
+//			return (get16Bits(10) >> 13) + 1;
+//		}
+//
+//		/**
+//		 * @return the 13 bit channel code of channel 3
+//		 */
+//		public int getChannel3Code()
+//		{
+//			return get16Bits(10) & 0x1fff;
+//		}
+//
+//		public int getChannelInfo4()
+//		{
+//			return get16Bits(12);
+//		}
+//
+//		/**
+//		 * The number of channels implemented in the device for channel 4.
+//		 *
+//		 * @return number of channels, <code>1 &le; channels &le; 8</code>
+//		 */
+//		public int getChannel4Channels()
+//		{
+//			return (get16Bits(12) >> 13) + 1;
+//		}
+//
+//		/**
+//		 * @return the 13 bit channel code of channel 4
+//		 */
+//		public int getChannel4Code()
+//		{
+//			return get16Bits(12) & 0x1fff;
+//		}
+
+		@Override
 		public String toString()
 		{
 			return DataUnitBuilder.toHex(d, "");
 		}
 
+		@Override
 		public byte[] toByteArray()
 		{
-			return (byte[]) d.clone();
+			return d.clone();
 		}
 
 		// offset is counted from MSB

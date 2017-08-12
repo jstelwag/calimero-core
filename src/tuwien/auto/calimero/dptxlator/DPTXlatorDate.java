@@ -44,8 +44,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.StringTokenizer;
 
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 
 /**
  * Translator for KNX DPTs with main number 11, type <b>date</b>.
@@ -73,10 +73,10 @@ public class DPTXlatorDate extends DPTXlator
 
 	private static Calendar c;
 	private static SimpleDateFormat sdf;
-	private static final Map types;
+	private static final Map<String, DPT> types;
 
 	static {
-		types = new HashMap(3);
+		types = new HashMap<>(3);
 		types.put(DPT_DATE.getID(), DPT_DATE);
 	}
 
@@ -128,6 +128,7 @@ public class DPTXlatorDate extends DPTXlator
 			sdf.applyPattern(pattern);
 	}
 
+	@Override
 	public String[] getAllValues()
 	{
 		final String[] buf = new String[data.length / 3];
@@ -208,6 +209,7 @@ public class DPTXlatorDate extends DPTXlator
 		return fromDPTMillis(0);
 	}
 
+	@Override
 	public void setData(final byte[] data, final int offset)
 	{
 		if (offset < 0 || offset > data.length)
@@ -227,7 +229,8 @@ public class DPTXlatorDate extends DPTXlator
 		this.data = buf;
 	}
 
-	public Map getSubTypes()
+	@Override
+	public Map<String, DPT> getSubTypes()
 	{
 		return types;
 	}
@@ -236,7 +239,7 @@ public class DPTXlatorDate extends DPTXlator
 	 * @return the subtypes of the date translator type
 	 * @see DPTXlator#getSubTypesStatic()
 	 */
-	protected static Map getSubTypesStatic()
+	protected static Map<String, DPT> getSubTypesStatic()
 	{
 		return types;
 	}
@@ -275,6 +278,7 @@ public class DPTXlatorDate extends DPTXlator
 		}
 	}
 
+	@Override
 	protected void toDPT(final String value, final short[] dst, final int index) throws KNXFormatException
 	{
 		if (sdf != null)

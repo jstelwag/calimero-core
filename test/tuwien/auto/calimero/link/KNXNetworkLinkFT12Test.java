@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2015 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -36,29 +36,39 @@
 
 package tuwien.auto.calimero.link;
 
-import junit.framework.TestCase;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import tag.FT12;
 import tuwien.auto.calimero.CloseEvent;
 import tuwien.auto.calimero.FrameEvent;
 import tuwien.auto.calimero.GroupAddress;
 import tuwien.auto.calimero.IndividualAddress;
+import tuwien.auto.calimero.KNXAddress;
+import tuwien.auto.calimero.KNXException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXTimeoutException;
 import tuwien.auto.calimero.Priority;
 import tuwien.auto.calimero.Util;
 import tuwien.auto.calimero.cemi.CEMILData;
-import tuwien.auto.calimero.exception.KNXException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.exception.KNXTimeoutException;
 import tuwien.auto.calimero.knxnetip.Debug;
 import tuwien.auto.calimero.link.medium.PLSettings;
 import tuwien.auto.calimero.link.medium.TPSettings;
-import tuwien.auto.calimero.log.LogManager;
 
 /**
  * Test for KNXNetworkLinkFT12.
- * <p>
  *
  * @author B. Malinowsky
  */
-public class KNXNetworkLinkFT12Test extends TestCase
+@FT12
+public class KNXNetworkLinkFT12Test
 {
 	private KNXNetworkLink lnk;
 	private NLListenerImpl nll;
@@ -72,6 +82,7 @@ public class KNXNetworkLinkFT12Test extends TestCase
 		volatile CEMILData con;
 		volatile boolean closed;
 
+		@Override
 		public void indication(final FrameEvent e)
 		{
 			assertNotNull(e);
@@ -83,6 +94,7 @@ public class KNXNetworkLinkFT12Test extends TestCase
 			Debug.printLData(ind);
 		}
 
+		@Override
 		public void confirmation(final FrameEvent e)
 		{
 			assertNotNull(e);
@@ -95,6 +107,7 @@ public class KNXNetworkLinkFT12Test extends TestCase
 			Debug.printLData(f);
 		}
 
+		@Override
 		public void linkClosed(final CloseEvent e)
 		{
 			assertNotNull(e);
@@ -105,63 +118,43 @@ public class KNXNetworkLinkFT12Test extends TestCase
 		}
 	}
 
-	/**
-	 * @param name
-	 */
-	public KNXNetworkLinkFT12Test(final String name)
+	@BeforeEach
+	void setUp() throws Exception
 	{
-		super(name);
-	}
-
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#setUp()
-	 */
-	protected void setUp() throws Exception
-	{
-		super.setUp();
-		LogManager.getManager().addWriter(null, Util.getLogWriter());
 		try {
 			// prevents access problems with a just previously closed port
 			Thread.sleep(50);
 			lnk = new KNXNetworkLinkFT12(Util.getSerialPort(), TPSettings.TP1);
 		}
 		catch (final Exception e) {
-			LogManager.getManager().removeWriter(null, Util.getLogWriter());
+			Util.tearDownLogging();
 			throw e;
 		}
 		nll = new NLListenerImpl();
 		lnk.addLinkListener(nll);
 
-		frame = new CEMILData(CEMILData.MC_LDATA_REQ, new IndividualAddress(0),
-			new GroupAddress(0, 0, 1), new byte[] { 0, (byte) (0x80 | 1) },
-			Priority.LOW);
-		frame2 = new CEMILData(CEMILData.MC_LDATA_REQ, new IndividualAddress(0),
-			new GroupAddress(0, 0, 1), new byte[] { 0, (byte) (0x80 | 0) },
-			Priority.URGENT, true, 3);
-		frame3 = new CEMILData(CEMILData.MC_LDATA_REQ, new IndividualAddress(0),
-			new GroupAddress(0, 0, 3), new byte[] { 0, (byte) (0x80 | 0) },
-			Priority.NORMAL);
+		frame = new CEMILData(CEMILData.MC_LDATA_REQ, new IndividualAddress(0), new GroupAddress(0, 0, 1),
+				new byte[] { 0, (byte) (0x80 | 1) }, Priority.LOW);
+		frame2 = new CEMILData(CEMILData.MC_LDATA_REQ, new IndividualAddress(0), new GroupAddress(0, 0, 1),
+				new byte[] { 0, (byte) (0x80 | 0) }, Priority.URGENT, true, 3);
+		frame3 = new CEMILData(CEMILData.MC_LDATA_REQ, new IndividualAddress(0), new GroupAddress(0, 0, 3),
+				new byte[] { 0, (byte) (0x80 | 0) }, Priority.NORMAL);
 	}
 
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#tearDown()
-	 */
-	protected void tearDown() throws Exception
+	@AfterEach
+	void tearDown() throws Exception
 	{
 		if (lnk != null)
 			lnk.close();
-
-		LogManager.getManager().removeWriter(null, Util.getLogWriter());
-		super.tearDown();
 	}
 
 	/**
 	 * Test method for
-	 * {@link tuwien.auto.calimero.link.KNXNetworkLinkFT12#KNXNetworkLinkFT12
-	 * (java.lang.String, tuwien.auto.calimero.link.medium.KNXMediumSettings)}.
+	 * {@link KNXNetworkLinkFT12#KNXNetworkLinkFT12(String, tuwien.auto.calimero.link.medium.KNXMediumSettings)}.
 	 *
 	 * @throws KNXException
 	 */
+	@Test
 	public final void testKNXNetworkLinkFT12StringKNXMediumSettings() throws KNXException
 	{
 		lnk.close();
@@ -171,9 +164,9 @@ public class KNXNetworkLinkFT12Test extends TestCase
 
 	/**
 	 * Test method for
-	 * {@link tuwien.auto.calimero.link.KNXNetworkLinkFT12#KNXNetworkLinkFT12 (int,
-	 * tuwien.auto.calimero.link.medium.KNXMediumSettings)}.
+	 * {@link KNXNetworkLinkFT12#KNXNetworkLinkFT12(int, tuwien.auto.calimero.link.medium.KNXMediumSettings)}.
 	 */
+	@Test
 	public final void testKNXNetworkLinkFT12IntKNXMediumSettings()
 	{
 		try {
@@ -186,9 +179,9 @@ public class KNXNetworkLinkFT12Test extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.link.KNXNetworkLinkFT12#setKNXMedium
-	 * (tuwien.auto.calimero.link.medium.KNXMediumSettings)}.
+	 * Test method for {@link KNXNetworkLinkFT12#setKNXMedium(tuwien.auto.calimero.link.medium.KNXMediumSettings)}.
 	 */
+	@Test
 	public final void testSetKNXMedium()
 	{
 		try {
@@ -213,8 +206,9 @@ public class KNXNetworkLinkFT12Test extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.link.KNXNetworkLinkFT12#getKNXMedium()}.
+	 * Test method for {@link KNXNetworkLinkFT12#getKNXMedium()}.
 	 */
+	@Test
 	public final void testGetKNXMedium()
 	{
 		assertTrue(lnk.getKNXMedium() instanceof TPSettings);
@@ -222,9 +216,9 @@ public class KNXNetworkLinkFT12Test extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.link.KNXNetworkLinkFT12#addLinkListener
-	 * (tuwien.auto.calimero.link.NetworkLinkListener)}.
+	 * Test method for {@link KNXNetworkLinkFT12#addLinkListener(tuwien.auto.calimero.link.NetworkLinkListener)}.
 	 */
+	@Test
 	public final void testAddLinkListener()
 	{
 		lnk.addLinkListener(nll);
@@ -232,10 +226,9 @@ public class KNXNetworkLinkFT12Test extends TestCase
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.link.KNXNetworkLinkFT12#removeLinkListener
-	 * (tuwien.auto.calimero.link.NetworkLinkListener)}.
+	 * Test method for {@link KNXNetworkLinkFT12#removeLinkListener(tuwien.auto.calimero.link.NetworkLinkListener)}.
 	 */
+	@Test
 	public final void testRemoveLinkListener()
 	{
 		lnk.removeLinkListener(nll);
@@ -245,8 +238,9 @@ public class KNXNetworkLinkFT12Test extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.link.KNXNetworkLinkFT12#getHopCount()}.
+	 * Test method for {@link KNXNetworkLinkFT12#getHopCount()}.
 	 */
+	@Test
 	public final void testGetHopCount()
 	{
 		assertEquals(6, lnk.getHopCount());
@@ -265,15 +259,14 @@ public class KNXNetworkLinkFT12Test extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.link.KNXNetworkLinkFT12#sendRequest
-	 * (tuwien.auto.calimero.KNXAddress, tuwien.auto.calimero.Priority, byte[])}.
+	 * Test method for {@link KNXNetworkLinkFT12#sendRequest(KNXAddress, tuwien.auto.calimero.Priority, byte[])}.
 	 *
 	 * @throws KNXLinkClosedException
 	 * @throws KNXTimeoutException
 	 * @throws InterruptedException on interrupted thread
 	 */
-	public final void testSendRequest() throws KNXTimeoutException,
-		KNXLinkClosedException, InterruptedException
+	@Test
+	public final void testSendRequest() throws KNXTimeoutException, KNXLinkClosedException, InterruptedException
 	{
 		doSend(new byte[] { 0, (byte) (0x80 | 1) });
 		doSend(new byte[] { 0, (byte) (0x80 | 0) });
@@ -282,14 +275,13 @@ public class KNXNetworkLinkFT12Test extends TestCase
 
 		// send an extended PL frame
 		try {
-			lnk.sendRequestWait(new GroupAddress(0, 0, 1), Priority.LOW, new byte[] { 0,
-				0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, (byte) (0x80 | 0) });
+			lnk.sendRequestWait(new GroupAddress(0, 0, 1), Priority.LOW,
+					new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, (byte) (0x80 | 0) });
 		}
 		catch (final KNXIllegalArgumentException e) {}
 	}
 
-	private void doSend(final byte[] nsdu) throws KNXLinkClosedException, InterruptedException,
-		KNXTimeoutException
+	private void doSend(final byte[] nsdu) throws KNXLinkClosedException, InterruptedException, KNXTimeoutException
 	{
 		nll.con = null;
 		lnk.sendRequest(new GroupAddress(0, 0, 1), Priority.LOW, nsdu);
@@ -298,14 +290,13 @@ public class KNXNetworkLinkFT12Test extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.link.KNXNetworkLinkFT12#sendRequestWait
-	 * (tuwien.auto.calimero.KNXAddress, tuwien.auto.calimero.Priority, byte[])}.
+	 * Test method for {@link KNXNetworkLinkFT12#sendRequestWait(KNXAddress, tuwien.auto.calimero.Priority, byte[])}.
 	 *
 	 * @throws KNXTimeoutException
 	 * @throws KNXLinkClosedException
 	 */
-	public final void testSendRequestWait() throws KNXLinkClosedException,
-		KNXTimeoutException
+	@Test
+	public final void testSendRequestWait() throws KNXLinkClosedException, KNXTimeoutException
 	{
 		doSendWait(new byte[] { 0, (byte) (0x80 | 1) });
 		doSendWait(new byte[] { 0, (byte) (0x80 | 0) });
@@ -313,8 +304,7 @@ public class KNXNetworkLinkFT12Test extends TestCase
 		doSendWait(new byte[] { 0, (byte) (0x80 | 0) });
 	}
 
-	private void doSendWait(final byte[] nsdu) throws KNXLinkClosedException,
-		KNXTimeoutException
+	private void doSendWait(final byte[] nsdu) throws KNXLinkClosedException, KNXTimeoutException
 	{
 		nll.con = null;
 		lnk.sendRequestWait(new GroupAddress(0, 0, 1), Priority.LOW, nsdu);
@@ -327,12 +317,12 @@ public class KNXNetworkLinkFT12Test extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.link.KNXNetworkLinkFT12#send
-	 * (tuwien.auto.calimero.cemi.CEMILData, boolean)}.
+	 * Test method for {@link KNXNetworkLinkFT12#send(tuwien.auto.calimero.cemi.CEMILData, boolean)}.
 	 *
 	 * @throws KNXLinkClosedException
 	 * @throws KNXTimeoutException
 	 */
+	@Test
 	public final void testSend() throws KNXTimeoutException, KNXLinkClosedException
 	{
 		nll.con = null;
@@ -356,12 +346,13 @@ public class KNXNetworkLinkFT12Test extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.link.KNXNetworkLinkFT12#getName()}.
+	 * Test method for {@link KNXNetworkLinkFT12#getName()}.
 	 */
+	@Test
 	public final void testGetName()
 	{
 		String n = lnk.getName();
-		assertTrue(Util.getSerialPortID(), n.indexOf(Util.getSerialPortID()) > -1);
+		assertTrue(n.indexOf(Util.getSerialPortID()) > -1, Util.getSerialPortID());
 		assertTrue(n.indexOf("link") > -1);
 		lnk.close();
 		n = lnk.getName();
@@ -370,8 +361,9 @@ public class KNXNetworkLinkFT12Test extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.link.KNXNetworkLinkFT12#isOpen()}.
+	 * Test method for {@link KNXNetworkLinkFT12#isOpen()}.
 	 */
+	@Test
 	public final void testIsOpen()
 	{
 		assertTrue(lnk.isOpen());
@@ -380,11 +372,12 @@ public class KNXNetworkLinkFT12Test extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.link.KNXNetworkLinkFT12#close()}.
+	 * Test method for {@link KNXNetworkLinkFT12#close()}.
 	 *
 	 * @throws InterruptedException on interrupted thread
 	 * @throws KNXTimeoutException
 	 */
+	@Test
 	public final void testClose() throws InterruptedException, KNXTimeoutException
 	{
 		System.out.println(lnk.toString());

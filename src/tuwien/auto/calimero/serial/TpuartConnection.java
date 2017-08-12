@@ -44,27 +44,26 @@ import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.EventListener;
 import java.util.HashSet;
 import java.util.Set;
+
+import org.slf4j.Logger;
 
 import tuwien.auto.calimero.CloseEvent;
 import tuwien.auto.calimero.DataUnitBuilder;
 import tuwien.auto.calimero.FrameEvent;
 import tuwien.auto.calimero.GroupAddress;
 import tuwien.auto.calimero.IndividualAddress;
+import tuwien.auto.calimero.KNXAckTimeoutException;
 import tuwien.auto.calimero.KNXAddress;
+import tuwien.auto.calimero.KNXException;
+import tuwien.auto.calimero.KNXFormatException;
 import tuwien.auto.calimero.KNXListener;
 import tuwien.auto.calimero.cemi.CEMI;
 import tuwien.auto.calimero.cemi.CEMIBusMon;
 import tuwien.auto.calimero.cemi.CEMIFactory;
 import tuwien.auto.calimero.cemi.CEMILData;
-import tuwien.auto.calimero.exception.KNXAckTimeoutException;
-import tuwien.auto.calimero.exception.KNXException;
-import tuwien.auto.calimero.exception.KNXFormatException;
 import tuwien.auto.calimero.internal.EventListeners;
-import tuwien.auto.calimero.log.LogLevel;
-import tuwien.auto.calimero.log.LogManager;
 import tuwien.auto.calimero.log.LogService;
 
 /**
@@ -146,11 +145,11 @@ public class TpuartConnection implements AutoCloseable
 	private volatile boolean busmon;
 	private volatile int busmonSequence;
 
-	private final EventListeners listeners = new EventListeners();
+	private final EventListeners<KNXListener> listeners = new EventListeners<>();
 
-	private final Set addresses = Collections.synchronizedSet(new HashSet());
+	private final Set<KNXAddress> addresses = Collections.synchronizedSet(new HashSet<>());
 
-	private final LogService logger;
+	private final Logger logger;
 
 	/**
 	 * Creates a new TP-UART connection using communication port <code>portId</code>, expecting a collection of KNX
@@ -163,12 +162,11 @@ public class TpuartConnection implements AutoCloseable
 	 *        address 0.2.ff on the TP1 network.
 	 * @throws KNXException on error opening the communication port, or initializing the TP-UART controller
 	 */
-	public TpuartConnection(final String portId, final Collection acknowledge)
-		throws KNXException
+	public TpuartConnection(final String portId, final Collection<? extends KNXAddress> acknowledge) throws KNXException
 	{
 		this.portId = portId;
-		logger = LogManager.getManager().getLogService("calimero.serial.tpuart");
-		adapter = LibraryAdapter.open(logger, portId);
+		logger = LogService.getAsyncLogger("calimero.serial.tpuart");
+		adapter = LibraryAdapter.open(logger, portId, 19200, 0);
 		os = adapter.getOutputStream();
 		is = adapter.getInputStream();
 
@@ -214,7 +212,7 @@ public class TpuartConnection implements AutoCloseable
 	 */
 	public void activateBusmonitor() throws IOException
 	{
-		logger.trace("activate TP-UART busmonitor");
+		logger.debug("activate TP-UART busmonitor");
 		os.write(ActivateBusmon);
 		busmonSequence = 0;
 		busmon = true;
@@ -265,18 +263,17 @@ public class TpuartConnection implements AutoCloseable
 
 		try {
 			final byte[] data = toUartServices(cEmiToTP1(frame));
-			if (logger.isLoggable(LogLevel.TRACE))
-				logger.trace("UART services " + DataUnitBuilder.toHex(data, " "));
-			req = (byte[]) frame.clone();
+			if (logger.isTraceEnabled())
+				logger.trace("create UART services {}", DataUnitBuilder.toHex(data, " "));
+			req = frame.clone();
 			final long start = System.nanoTime();
 			synchronized (enterIdleLock) {
 				while (!idle)
 					enterIdleLock.wait();
 			}
-			if (logger.isLoggable(LogLevel.TRACE)) {
-				logger.trace("UART ready for sending after " + (System.nanoTime() - start) / 1000 + " us");
-				logger.trace("write UART services, " + (waitForCon ? "waiting for .con" : "non-blocking"));
-			}
+			logger.trace("UART ready for sending after {} us", (System.nanoTime() - start) / 1000);
+
+			logger.debug("write UART services, {}", (waitForCon ? "waiting for .con" : "non-blocking"));
 			os.write(data);
 			state = ConPending;
 			if (!waitForCon)
@@ -298,6 +295,7 @@ public class TpuartConnection implements AutoCloseable
 		}
 	}
 
+	@Override
 	public void close()
 	{
 		close(CloseEvent.USER_REQUEST, "user request");
@@ -321,22 +319,12 @@ public class TpuartConnection implements AutoCloseable
 	private void fireConnectionClosed(final int origin, final String reason)
 	{
 		final CloseEvent ce = new CloseEvent(this, origin, reason);
-		final EventListener[] el = listeners.listeners();
-		for (int i = 0; i < el.length; i++) {
-			final KNXListener l = (KNXListener) el[i];
-			try {
-				l.connectionClosed(ce);
-			}
-			catch (final RuntimeException e) {
-				removeConnectionListener(l);
-				logger.error("removed event listener", e);
-			}
-		}
+		listeners.fire(l -> l.connectionClosed(ce));
 	}
 
 	private void reset() throws IOException
 	{
-		logger.trace("reset TP-UART controller");
+		logger.debug("reset TP-UART controller");
 		busmon = false;
 		busmonSequence = 0;
 		os.write(Reset_req);
@@ -410,17 +398,15 @@ public class TpuartConnection implements AutoCloseable
 				remaining = end - System.currentTimeMillis();
 			}
 		}
-		logger.trace("ACK received after " + (ExchangeTimeout - remaining) + " ms");
+		logger.trace("ACK received after {} ms", ExchangeTimeout - remaining);
 		return remaining > 0;
 	}
 
 	private static int checksum(final byte[] frame)
 	{
 		int cs = 0;
-		for (int i = 0; i < frame.length; i++) {
-			final byte b = frame[i];
+		for (final byte b : frame)
 			cs ^= b;
-		}
 		return ~cs;
 	}
 
@@ -431,8 +417,8 @@ public class TpuartConnection implements AutoCloseable
 		final int expected = frame[frame.length - 1];
 		final boolean valid = expected == cs;
 		if (!valid)
-			logger.warn("invalid L-Data checksum 0x" + Integer.toHexString(cs & 0xff) + ", expected 0x"
-					+ Integer.toHexString(expected & 0xff));
+			logger.warn("invalid L-Data checksum 0x{}, expected 0x{}", Integer.toHexString(cs & 0xff),
+					Integer.toHexString(expected & 0xff));
 		return valid;
 	}
 
@@ -456,6 +442,7 @@ public class TpuartConnection implements AutoCloseable
 			setPriority(Thread.MAX_PRIORITY);
 		}
 
+		@Override
 		public void run()
 		{
 			// at first drain rx queue of any old frames
@@ -466,7 +453,7 @@ public class TpuartConnection implements AutoCloseable
 					drained++;
 			}
 			catch (final IOException ignore) {}
-			logger.trace("drain rx queue (" + drained + " bytes)");
+			logger.trace("drain rx queue ({} bytes)", drained);
 
 			long enterIdleTimestamp = 0; // [ns]
 			while (!quit) {
@@ -492,18 +479,18 @@ public class TpuartConnection implements AutoCloseable
 					}
 
 					final long idlePeriod = (start - enterIdleTimestamp) / 1000;
-					if (enterIdleTimestamp != 0 && idlePeriod > 100000)
-						logger.trace("return from extended idle period of " + idlePeriod + " us");
+					if (enterIdleTimestamp != 0 && idlePeriod > 100_000)
+						logger.trace("return from extended idle period of {} us", idlePeriod);
 					idle = false;
 					enterIdleTimestamp = 0;
 
 					if (parseFrame(c) || isLDataCon(c) || isUartStateInd(c))
 						; // nothing to do
 					else if (c == Reset_ind)
-						logger.trace("TP-UART reset.ind");
+						logger.debug("TP-UART reset.ind");
 
 //					final long loop = System.nanoTime() - start;
-//					logger.trace("loop time = " + loop / 1000 + " us");
+//					logger.trace("loop time = {} us", loop / 1000);
 				}
 				catch (final RuntimeException e) {
 					e.printStackTrace();
@@ -538,7 +525,7 @@ public class TpuartConnection implements AutoCloseable
 				final byte[] buf = in.toByteArray();
 				in.reset();
 				size = 0;
-				logger.trace("reset input buffer, discard partial frame (length " + buf.length + ") " +
+				logger.debug("reset input buffer, discard partial frame (length {}) {}", buf.length,
 						DataUnitBuilder.toHex(buf, " "));
 			}
 
@@ -560,8 +547,8 @@ public class TpuartConnection implements AutoCloseable
 					if (frame.length >= total) {
 						try {
 							final byte[] data = in.toByteArray();
-							logger.trace("received TP1 L-Data (length " + frame.length + "): "
-									+ DataUnitBuilder.toHex(data, " "));
+							logger.debug("received TP1 L-Data (length {}): {}", frame.length,
+									DataUnitBuilder.toHex(data, " "));
 
 							if (busmon) {
 								fireFrameReceived(createBusmonInd(data));
@@ -612,10 +599,9 @@ public class TpuartConnection implements AutoCloseable
 			final boolean txError = (c & 0x20) == 0x20; // send 0, receive 1
 			final boolean protError = (c & 0x10) == 0x10; // illegal ctrl byte
 			final boolean tempWarning = (c & 0x08) == 0x08; // too hot
-			if (logger.isLoggable(LogLevel.TRACE))
-				logger.trace("TP-UART status update: " + (slaveCollision ? "Slave collision, " : "")
-						+ "Temp. " + (tempWarning ? "warning" : "OK") + ", Errors: Rx=" + rxError
-						+ " Tx=" + txError + " Prot=" + protError);
+			logger.debug("TP-UART status update: {}Temp. {}, Errors: Rx={} Tx={} Prot={}",
+					slaveCollision ? "Slave collision, " : "", tempWarning ? "warning" : "OK", rxError, txError,
+					protError);
 			// NYI if controller sends warning, we have to pause tx for 1 sec
 			if (tempWarning)
 				logger.warn("TP-UART high temperature warning!");
@@ -629,7 +615,7 @@ public class TpuartConnection implements AutoCloseable
 				final boolean pos = (c & 0x80) == 0x80;
 				onConfirmation(pos);
 				final String status = pos ? "positive" : "negative";
-				logger.trace(status + " L_Data.con");
+				logger.debug("{} L_Data.con", status);
 			}
 			return con;
 		}
@@ -641,24 +627,22 @@ public class TpuartConnection implements AutoCloseable
 			final boolean start = (c & 0xd0) == StdFrameFormat || (c & 0xd0) == ExtFrameFormat;
 			if (start) {
 				final boolean repeated = (c & RepeatFlag) == 0;
-				logger.trace("Start of frame 0x" + Integer.toHexString(c)
-						+ ", repeated = " + repeated);
+				logger.trace("Start of frame 0x{}, repeated = {}", Integer.toHexString(c), repeated);
 				extFrame = (c & 0xd0) == ExtFrameFormat;
 			}
 			return start;
 		}
 
 		// pre: we have a new .ind frame, length > 5
-		// The ack service has to be sent at the latest 1.7 ms after receiving the address
-		// type bit of the the L-Data.ind
+		// The ack service has to be sent at the latest 1.7 ms after receiving the
+		// address-type bit of the L-Data.ind
 		private void ack(final byte[] frame) throws IOException
 		{
 			if (busmon || frameAcked)
 				return;
 			final byte[] addr = new byte[] { frame[3], frame[4] };
 			final boolean group = (frame[5] & 0x80) == 0x80;
-			final KNXAddress dst = group ? (KNXAddress) new GroupAddress(addr)
-					: new IndividualAddress(addr);
+			final KNXAddress dst = group ? new GroupAddress(addr) : new IndividualAddress(addr);
 
 			// We can answer as follows:
 			// ACK: if we got addressed
@@ -669,7 +653,7 @@ public class TpuartConnection implements AutoCloseable
 			if (oneOfUs) {
 				ack |= 0x01;
 				os.write(new byte[] { (byte) ack });
-				logger.trace("write ACK (0x" + Integer.toHexString(ack) + ") for " + dst);
+				logger.trace("write ACK (0x{}) for {}", Integer.toHexString(ack), dst);
 			}
 			frameAcked = true;
 		}
@@ -755,27 +739,14 @@ public class TpuartConnection implements AutoCloseable
 		{
 			if (frame == null)
 				return;
-			logger.trace("cEMI (length " + frame.length + "): " + DataUnitBuilder.toHex(frame, " "));
+			logger.trace("cEMI (length {}): {}", frame.length, DataUnitBuilder.toHex(frame, " "));
 			try {
 				final CEMI msg = CEMIFactory.create(frame, 0, frame.length);
 				final FrameEvent fe = new FrameEvent(this, msg);
-				final EventListener[] el = listeners.listeners();
-				for (int i = 0; i < el.length; i++) {
-					final KNXListener l = (KNXListener) el[i];
-					try {
-						l.frameReceived(fe);
-					}
-					catch (final RuntimeException e) {
-						removeConnectionListener(l);
-						logger.error("removed event listener", e);
-					}
-				}
+				listeners.fire(l -> l.frameReceived(fe));
 			}
-			catch (final KNXFormatException e) {
-				logger.error("invalid frame for cEMI: " + DataUnitBuilder.toHex(frame, " "), e);
-			}
-			catch (final RuntimeException e) {
-				logger.error("invalid frame for cEMI: " + DataUnitBuilder.toHex(frame, " "), e);
+			catch (final KNXFormatException | RuntimeException e) {
+				logger.error("invalid frame for cEMI: {}", DataUnitBuilder.toHex(frame, " "), e);
 			}
 		}
 	}

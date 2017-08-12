@@ -38,7 +38,6 @@ package tuwien.auto.calimero.buffer;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.EventListener;
 import java.util.Iterator;
 import java.util.List;
 
@@ -46,6 +45,7 @@ import tuwien.auto.calimero.CloseEvent;
 import tuwien.auto.calimero.DataUnitBuilder;
 import tuwien.auto.calimero.FrameEvent;
 import tuwien.auto.calimero.KNXAddress;
+import tuwien.auto.calimero.KNXTimeoutException;
 import tuwien.auto.calimero.Priority;
 import tuwien.auto.calimero.buffer.cache.Cache;
 import tuwien.auto.calimero.buffer.cache.CacheObject;
@@ -53,14 +53,11 @@ import tuwien.auto.calimero.buffer.cache.LFUCache;
 import tuwien.auto.calimero.cemi.CEMI;
 import tuwien.auto.calimero.cemi.CEMILData;
 import tuwien.auto.calimero.datapoint.DatapointModel;
-import tuwien.auto.calimero.exception.KNXTimeoutException;
 import tuwien.auto.calimero.internal.EventListeners;
 import tuwien.auto.calimero.link.KNXLinkClosedException;
 import tuwien.auto.calimero.link.KNXNetworkLink;
 import tuwien.auto.calimero.link.NetworkLinkListener;
 import tuwien.auto.calimero.link.medium.KNXMediumSettings;
-import tuwien.auto.calimero.log.LogManager;
-import tuwien.auto.calimero.log.LogService;
 
 /**
  * A network buffer temporarily stores KNX network messages for better response and/or KNX network
@@ -106,7 +103,7 @@ public final class NetworkBuffer
 		private Configuration.RequestFilter reqFilter;
 		private volatile boolean active;
 		private volatile boolean queryBufferOnly;
-		private DatapointModel model;
+		private DatapointModel<?> model;
 
 		// listen on the link and update our buffers
 		private final class SquirrelListener implements NetworkLinkListener
@@ -114,18 +111,21 @@ public final class NetworkBuffer
 			SquirrelListener()
 			{}
 
+			@Override
 			public void confirmation(final FrameEvent e)
 			{
 				if (active && ((CEMILData) e.getFrame()).isPositiveConfirmation())
 					updateBuffer(e.getFrame());
 			}
 
+			@Override
 			public void indication(final FrameEvent e)
 			{
 				if (active)
 					updateBuffer(e.getFrame());
 			}
 
+			@Override
 			public void linkClosed(final CloseEvent e)
 			{
 				activate(false);
@@ -141,45 +141,52 @@ public final class NetworkBuffer
 		private final class SquirrelLink implements KNXNetworkLink
 		{
 			private final KNXNetworkLink base;
-			private final EventListeners listeners = new EventListeners();
+			private final EventListeners<NetworkLinkListener> listeners = new EventListeners<>();
 
 			SquirrelLink(final KNXNetworkLink baseLink)
 			{
 				base = baseLink;
 			}
 
+			@Override
 			public void addLinkListener(final NetworkLinkListener l)
 			{
 				base.addLinkListener(l);
 				listeners.add(l);
 			}
 
+			@Override
 			public void removeLinkListener(final NetworkLinkListener l)
 			{
 				base.removeLinkListener(l);
 				listeners.remove(l);
 			}
 
+			@Override
 			public int getHopCount()
 			{
 				return base.getHopCount();
 			}
 
+			@Override
 			public void setHopCount(final int count)
 			{
 				base.setHopCount(count);
 			}
 
+			@Override
 			public KNXMediumSettings getKNXMedium()
 			{
 				return base.getKNXMedium();
 			}
 
+			@Override
 			public void setKNXMedium(final KNXMediumSettings a)
 			{
 				base.setKNXMedium(a);
 			}
 
+			@Override
 			public void sendRequest(final KNXAddress dst, final Priority p,
 				final byte[] nsdu) throws KNXLinkClosedException, KNXTimeoutException
 			{
@@ -187,6 +194,7 @@ public final class NetworkBuffer
 					base.sendRequest(dst, p, nsdu);
 			}
 
+			@Override
 			public void sendRequestWait(final KNXAddress dst, final Priority p,
 				final byte[] nsdu) throws KNXTimeoutException, KNXLinkClosedException
 			{
@@ -194,6 +202,7 @@ public final class NetworkBuffer
 					base.sendRequestWait(dst, p, nsdu);
 			}
 
+			@Override
 			public void send(final CEMILData msg, final boolean waitForCon)
 				throws KNXTimeoutException, KNXLinkClosedException
 			{
@@ -201,16 +210,19 @@ public final class NetworkBuffer
 					base.send(msg, waitForCon);
 			}
 
+			@Override
 			public String getName()
 			{
 				return "buffered " + base.getName();
 			}
 
+			@Override
 			public boolean isOpen()
 			{
 				return base.isOpen();
 			}
 
+			@Override
 			public void close()
 			{
 				activate(false);
@@ -239,16 +251,7 @@ public final class NetworkBuffer
 			private void fireIndication(final CEMILData frame)
 			{
 				final FrameEvent e = new FrameEvent(this, frame);
-				final EventListener[] el = listeners.listeners();
-				for (int i = 0; i < el.length; ++i) {
-					final NetworkLinkListener l = (NetworkLinkListener) el[i];
-					try {
-						l.indication(e);
-					}
-					catch (final RuntimeException rte) {
-						removeLinkListener(l);
-					}
-				}
+				listeners.fire(l -> l.indication(e));
 			}
 		}
 
@@ -259,6 +262,7 @@ public final class NetworkBuffer
 			link.addLinkListener(ll);
 		}
 
+		@Override
 		public void activate(final boolean activate)
 		{
 			active = activate;
@@ -268,6 +272,7 @@ public final class NetworkBuffer
 			if (active && nwFilter == null) {
 				nwFilter = new NetworkFilter()
 				{
+					@Override
 					public void accept(final CEMI frame, final Configuration c)
 					{
 						final Cache localCache = c.getCache();
@@ -284,6 +289,7 @@ public final class NetworkBuffer
 							localCache.put(new LDataObject(f));
 					}
 
+					@Override
 					public void init(final Configuration c)
 					{}
 				};
@@ -293,26 +299,31 @@ public final class NetworkBuffer
 				nwFilter.init(this);
 		}
 
+		@Override
 		public boolean isActive()
 		{
 			return active;
 		}
 
+		@Override
 		public KNXNetworkLink getBaseLink()
 		{
 			return lnk.base;
 		}
 
+		@Override
 		public KNXNetworkLink getBufferedLink()
 		{
 			return lnk;
 		}
 
+		@Override
 		public void setQueryBufferOnly(final boolean bufferOnly)
 		{
 			queryBufferOnly = bufferOnly;
 		}
 
+		@Override
 		public synchronized void setCache(final Cache c)
 		{
 			if (c == null && active)
@@ -320,23 +331,27 @@ public final class NetworkBuffer
 			cache = c;
 		}
 
+		@Override
 		public synchronized Cache getCache()
 		{
 			return cache;
 		}
 
-		public synchronized void setDatapointModel(final DatapointModel m)
+		@Override
+		public synchronized void setDatapointModel(final DatapointModel<?> m)
 		{
 			model = m;
 			if (nwFilter != null)
 				nwFilter.init(this);
 		}
 
-		public synchronized DatapointModel getDatapointModel()
+		@Override
+		public synchronized DatapointModel<?> getDatapointModel()
 		{
 			return model;
 		}
 
+		@Override
 		public void setFilter(final NetworkFilter nf, final RequestFilter rf)
 		{
 			nwFilter = nf;
@@ -345,11 +360,13 @@ public final class NetworkBuffer
 				nwFilter.init(this);
 		}
 
+		@Override
 		public NetworkFilter getNetworkFilter()
 		{
 			return nwFilter;
 		}
 
+		@Override
 		public RequestFilter getRequestFilter()
 		{
 			return reqFilter;
@@ -362,16 +379,11 @@ public final class NetworkBuffer
 		}
 	}
 
-	/** Name of the log service used for network buffer logging. */
-	public static final String LOG_SERVICE = "network buffer";
-
-	static final LogService logger = LogManager.getManager().getLogService(LOG_SERVICE);
-
 	// all network buffers currently in use
 	// private static final List buffers = new ArrayList();
 	private static int uniqueInstID;
 
-	private final List configs = Collections.synchronizedList(new ArrayList());
+	private final List<ConfigImpl> configs = Collections.synchronizedList(new ArrayList<>());
 	private final String name;
 
 	private NetworkBuffer(final String installation)
@@ -446,8 +458,8 @@ public final class NetworkBuffer
 	public Configuration getConfiguration(final KNXNetworkLink bufferedLink)
 	{
 		synchronized (configs) {
-			for (final Iterator i = configs.iterator(); i.hasNext();) {
-				final ConfigImpl lc = (ConfigImpl) i.next();
+			for (final Iterator<ConfigImpl> i = configs.iterator(); i.hasNext();) {
+				final ConfigImpl lc = i.next();
 				if (lc.getBufferedLink() == bufferedLink)
 					return lc;
 			}
@@ -464,7 +476,7 @@ public final class NetworkBuffer
 	 */
 	public Configuration[] getAllConfigurations()
 	{
-		return (Configuration[]) configs.toArray(new Configuration[configs.size()]);
+		return configs.toArray(new Configuration[configs.size()]);
 	}
 
 	/**
@@ -488,7 +500,7 @@ public final class NetworkBuffer
 	{
 		synchronized (configs) {
 			while (!configs.isEmpty())
-				removeConfiguration((Configuration) configs.get(configs.size() - 1));
+				removeConfiguration(configs.get(configs.size() - 1));
 		}
 	}
 

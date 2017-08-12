@@ -36,36 +36,47 @@
 
 package tuwien.auto.calimero.knxnetip;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+import static tuwien.auto.calimero.knxnetip.KNXnetIPTunnel.TunnelingLayer.BusMonitorLayer;
+import static tuwien.auto.calimero.knxnetip.KNXnetIPTunnel.TunnelingLayer.LinkLayer;
+
 import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.Vector;
 
-import junit.framework.TestCase;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import tag.KnxnetIP;
+import tag.Slow;
 import tuwien.auto.calimero.CloseEvent;
 import tuwien.auto.calimero.FrameEvent;
 import tuwien.auto.calimero.GroupAddress;
 import tuwien.auto.calimero.IndividualAddress;
+import tuwien.auto.calimero.KNXException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXIllegalStateException;
 import tuwien.auto.calimero.KNXListener;
+import tuwien.auto.calimero.KNXTimeoutException;
 import tuwien.auto.calimero.Priority;
 import tuwien.auto.calimero.Util;
 import tuwien.auto.calimero.cemi.CEMI;
 import tuwien.auto.calimero.cemi.CEMIBusMon;
 import tuwien.auto.calimero.cemi.CEMILData;
-import tuwien.auto.calimero.exception.KNXException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.exception.KNXIllegalStateException;
-import tuwien.auto.calimero.exception.KNXTimeoutException;
-import tuwien.auto.calimero.log.LogManager;
 
 /**
  * @author B. Malinowsky
  */
-public class KNXnetIPTunnelTest extends TestCase
+@KnxnetIP
+public class KNXnetIPTunnelTest
 {
-	private static KNXnetIPConnection.BlockingMode noblock =
-		KNXnetIPConnection.NONBLOCKING;
-	private static KNXnetIPConnection.BlockingMode ack = KNXnetIPConnection.WAIT_FOR_ACK;
-	private static KNXnetIPConnection.BlockingMode con = KNXnetIPConnection.WAIT_FOR_CON;
+	private static KNXnetIPConnection.BlockingMode noblock = KNXnetIPConnection.BlockingMode.NonBlocking;
+	private static KNXnetIPConnection.BlockingMode ack = KNXnetIPConnection.BlockingMode.WaitForAck;
+	private static KNXnetIPConnection.BlockingMode con = KNXnetIPConnection.BlockingMode.WaitForCon;
 
 	private KNXnetIPTunnel t;
 	private KNXnetIPTunnel tnat;
@@ -83,8 +94,9 @@ public class KNXnetIPTunnelTest extends TestCase
 	{
 		boolean closed;
 		CEMI received;
-		List fifoReceived = new Vector();
+		List<CEMI> fifoReceived = new Vector<>();
 
+		@Override
 		public void frameReceived(final FrameEvent e)
 		{
 			assertNotNull(e);
@@ -102,6 +114,7 @@ public class KNXnetIPTunnelTest extends TestCase
 			fifoReceived.add(e.getFrame());
 		}
 
+		@Override
 		public void connectionClosed(final CloseEvent e)
 		{
 			assertNotNull(e);
@@ -117,38 +130,23 @@ public class KNXnetIPTunnelTest extends TestCase
 		}
 	}
 
-	/**
-	 * @param name name of test case
-	 */
-	public KNXnetIPTunnelTest(final String name)
+	@BeforeEach
+	void init() throws Exception
 	{
-		super(name);
-	}
-
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#setUp()
-	 */
-	protected void setUp() throws Exception
-	{
-		super.setUp();
 		l = new KNXListenerImpl();
 		lnat = new KNXListenerImpl();
 		lmon = new KNXListenerImpl();
 
-		LogManager.getManager().addWriter(null, Util.getLogWriter());
-
-		frame = new CEMILData(CEMILData.MC_LDATA_REQ, new IndividualAddress(0), new GroupAddress(0,
-				0, 1), new byte[] { 0, (byte) (0x80 | 1) }, Priority.NORMAL);
-		frame2 = new CEMILData(CEMILData.MC_LDATA_REQ, new IndividualAddress(0), new GroupAddress(
-				0, 0, 1), new byte[] { 0, (byte) (0x80 | 0) }, Priority.URGENT);
-		frameNoDest = new CEMILData(CEMILData.MC_LDATA_REQ, new IndividualAddress(0),
-				new GroupAddress(10, 7, 10), new byte[] { 0, (byte) (0x80 | 0) }, Priority.LOW);
+		frame = new CEMILData(CEMILData.MC_LDATA_REQ, new IndividualAddress(0), new GroupAddress(0, 0, 1),
+				new byte[] { 0, (byte) (0x80 | 1) }, Priority.NORMAL);
+		frame2 = new CEMILData(CEMILData.MC_LDATA_REQ, new IndividualAddress(0), new GroupAddress(0, 0, 1),
+				new byte[] { 0, (byte) (0x80 | 0) }, Priority.URGENT);
+		frameNoDest = new CEMILData(CEMILData.MC_LDATA_REQ, new IndividualAddress(0), new GroupAddress(10, 7, 10),
+				new byte[] { 0, (byte) (0x80 | 0) }, Priority.LOW);
 	}
 
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#tearDown()
-	 */
-	protected void tearDown() throws Exception
+	@AfterEach
+	void tearDown() throws Exception
 	{
 		if (t != null) {
 			t.close();
@@ -158,18 +156,15 @@ public class KNXnetIPTunnelTest extends TestCase
 		}
 		if (mon != null)
 			mon.close();
-		LogManager.getManager().removeWriter(null, Util.getLogWriter());
-		super.tearDown();
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.KNXnetIPTunnel#send
-	 * (tuwien.auto.calimero.cemi.CEMI,
-	 * tuwien.auto.calimero.knxnetip.KNXnetIPConnection.BlockingMode)}.
+	 * Test method for {@link KNXnetIPTunnel#send(CEMI, tuwien.auto.calimero.knxnetip.KNXnetIPConnection.BlockingMode)}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testSend() throws KNXException, InterruptedException
 	{
 		newTunnel();
@@ -199,22 +194,19 @@ public class KNXnetIPTunnelTest extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.KNXnetIPTunnel#send
-	 * (tuwien.auto.calimero.cemi.CEMI,
-	 * tuwien.auto.calimero.knxnetip.KNXnetIPConnection.BlockingMode)}.
+	 * Test method for {@link KNXnetIPTunnel#send(CEMI, tuwien.auto.calimero.knxnetip.KNXnetIPConnection.BlockingMode)}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
-	public final void testFIFOSend() throws KNXException,
-		InterruptedException
+	@Test
+	public final void testFIFOSend() throws KNXException, InterruptedException
 	{
 		final int sends = 10;
-		final List frames = new Vector();
+		final List<CEMILData> frames = new Vector<>();
 		for (int i = 0; i < sends; i++) {
-			frames.add(new CEMILData(CEMILData.MC_LDATA_REQ,
-				new IndividualAddress(i + 1), new GroupAddress(2, 2, 2), new byte[] { 0,
-					(byte) (0x80 | (i % 2)) }, Priority.LOW));
+			frames.add(new CEMILData(CEMILData.MC_LDATA_REQ, new IndividualAddress(i + 1), new GroupAddress(2, 2, 2),
+					new byte[] { 0, (byte) (0x80 | (i % 2)) }, Priority.LOW));
 		}
 		class Sender extends Thread
 		{
@@ -223,20 +215,18 @@ public class KNXnetIPTunnelTest extends TestCase
 				super(name);
 			}
 
+			@Override
 			public void run()
 			{
 				try {
-					final CEMILData f = (CEMILData) frames.remove(0);
+					final CEMILData f = frames.remove(0);
 					synchronized (this) {
 						notify();
 					}
 					t.send(f, con);
 					System.out.println(getName() + " returned sending " + f.getSource());
 				}
-				catch (final KNXTimeoutException e) {
-					e.printStackTrace();
-				}
-				catch (final KNXConnectionClosedException e) {
+				catch (KNXTimeoutException | KNXConnectionClosedException | InterruptedException e) {
 					e.printStackTrace();
 				}
 			}
@@ -263,19 +253,17 @@ public class KNXnetIPTunnelTest extends TestCase
 		System.out.println("time for " + sends + " send MT with con: " + (end - start));
 		assertEquals(sends, l.fifoReceived.size());
 		for (int i = 0; i < sends; i++) {
-			assertEquals(new IndividualAddress(i + 1),
-				((CEMILData) l.fifoReceived.get(i)).getSource());
+			assertEquals(new IndividualAddress(i + 1), ((CEMILData) l.fifoReceived.get(i)).getSource());
 		}
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.KNXnetIPTunnel#send
-	 * (tuwien.auto.calimero.cemi.CEMI,
-	 * tuwien.auto.calimero.knxnetip.KNXnetIPConnection.BlockingMode)}.
+	 * Test method for {@link KNXnetIPTunnel#send(tuwien.auto.calimero.cemi.CEMI, KNXnetIPConnection.BlockingMode)}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testNATSend() throws KNXException, InterruptedException
 	{
 		if (!Util.TEST_NAT) {
@@ -290,13 +278,12 @@ public class KNXnetIPTunnelTest extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.KNXnetIPTunnel#send
-	 * (tuwien.auto.calimero.cemi.CEMI,
-	 * tuwien.auto.calimero.knxnetip.KNXnetIPConnection.BlockingMode)}.
+	 * Test method for {@link KNXnetIPTunnel#send(CEMI, KNXnetIPConnection.BlockingMode)}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testMonitorSend() throws KNXException, InterruptedException
 	{
 		newMonitor();
@@ -313,6 +300,7 @@ public class KNXnetIPTunnelTest extends TestCase
 		catch (final KNXException e) {}
 	}
 
+	@Test
 	public final void testTunnelWithMonitor() throws KNXException, InterruptedException
 	{
 		newTunnel();
@@ -323,6 +311,7 @@ public class KNXnetIPTunnelTest extends TestCase
 		catch (final KNXException e) {}
 	}
 
+	@Test
 	public final void testReceive() throws KNXException, InterruptedException
 	{
 		newTunnel();
@@ -333,6 +322,7 @@ public class KNXnetIPTunnelTest extends TestCase
 		catch (final InterruptedException e) {}
 	}
 
+	@Test
 	public final void testReceiveMonitor() throws KNXException, InterruptedException
 	{
 		newMonitor();
@@ -343,9 +333,8 @@ public class KNXnetIPTunnelTest extends TestCase
 		catch (final InterruptedException e) {}
 	}
 
-	private void doSend(final CEMILData f, final KNXnetIPConnection.BlockingMode m,
-		final boolean positiveConfirmation) throws KNXTimeoutException,
-		KNXConnectionClosedException
+	private void doSend(final CEMILData f, final KNXnetIPConnection.BlockingMode m, final boolean positiveConfirmation)
+		throws KNXTimeoutException, KNXConnectionClosedException, InterruptedException
 	{
 		l.received = null;
 		t.send(f, m);
@@ -370,8 +359,8 @@ public class KNXnetIPTunnelTest extends TestCase
 	}
 
 	private void doNATSend(final CEMILData f, final KNXnetIPConnection.BlockingMode m,
-		final boolean positiveConfirmation) throws KNXTimeoutException,
-		KNXConnectionClosedException
+		final boolean positiveConfirmation)
+		throws KNXTimeoutException, KNXConnectionClosedException, InterruptedException
 	{
 		lnat.received = null;
 		tnat.send(f, m);
@@ -382,24 +371,24 @@ public class KNXnetIPTunnelTest extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.KNXnetIPTunnel#KNXnetIPTunnel
-	 * (short, java.net.InetSocketAddress, java.net.InetSocketAddress, boolean)}.
+	 * Test method for
+	 * {@link KNXnetIPTunnel#KNXnetIPTunnel(KNXnetIPTunnel.TunnelingLayer, InetSocketAddress, InetSocketAddress, boolean)}
+	 * .
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testKNXnetIPTunnel() throws KNXException, InterruptedException
 	{
-		try {
-			new KNXnetIPTunnel(KNXnetIPTunnel.LINK_LAYER, null, new InetSocketAddress(
-				"127.0.0.1", 4000), false);
+		try (final KNXnetIPConnection c = new KNXnetIPTunnel(LinkLayer, null, new InetSocketAddress("127.0.0.1", 4000),
+				false)) {
 			fail("local socket is null");
 		}
 		catch (final KNXIllegalArgumentException e) {}
 
-		try {
-			new KNXnetIPTunnel(KNXnetIPTunnel.LINK_LAYER, new InetSocketAddress(
-				"0.0.0.0", 0), new InetSocketAddress("127.0.0.1", 4000), false);
+		try (final KNXnetIPConnection c = new KNXnetIPTunnel(LinkLayer, new InetSocketAddress("0.0.0.0", 0),
+				new InetSocketAddress("127.0.0.1", 4000), false)) {
 			fail("wildcard for local socket not null");
 		}
 		catch (final KNXIllegalArgumentException e) {}
@@ -409,12 +398,14 @@ public class KNXnetIPTunnelTest extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.KNXnetIPTunnel#KNXnetIPTunnel
-	 * (short, java.net.InetSocketAddress, java.net.InetSocketAddress, boolean)}.
+	 * Test method for
+	 * {@link KNXnetIPTunnel#KNXnetIPTunnel(KNXnetIPTunnel.TunnelingLayer, InetSocketAddress, InetSocketAddress, boolean)}
+	 * .
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testKNXnetIPMonitor() throws KNXException, InterruptedException
 	{
 		newMonitor();
@@ -422,11 +413,12 @@ public class KNXnetIPTunnelTest extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.KNXnetIPTunnel#close()}.
+	 * Test method for {@link KNXnetIPTunnel#close()}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testClose() throws KNXException, InterruptedException
 	{
 		newTunnel();
@@ -441,12 +433,12 @@ public class KNXnetIPTunnelTest extends TestCase
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.knxnetip.KNXnetIPTunnel#getRemoteAddress()}.
+	 * Test method for {@link KNXnetIPTunnel#getRemoteAddress()}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testGetRemoteAddress() throws KNXException, InterruptedException
 	{
 		newTunnel();
@@ -457,20 +449,21 @@ public class KNXnetIPTunnelTest extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.KNXnetIPTunnel#getState()}.
+	 * Test method for {@link KNXnetIPTunnel#getState()}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
-	public final void testGetState() throws KNXException,
-		InterruptedException
+	@Test
+	@Slow
+	public final void testGetState() throws KNXException, InterruptedException
 	{
 		newTunnel();
 		assertEquals(KNXnetIPConnection.OK, t.getState());
 		System.out.println();
 		System.out.println("Testing heartbeat, this will take some minutes !!!");
 		System.out.println("...");
-		// give some seconds space for delay so we're on the save side
+		// give some seconds space for delay so we're on the safe side
 		Thread.sleep(4000);
 		Thread.sleep(60000);
 		assertEquals(KNXnetIPConnection.OK, t.getState());
@@ -479,13 +472,14 @@ public class KNXnetIPTunnelTest extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.KNXnetIPTunnel#getState()}.
+	 * Test method for {@link KNXnetIPTunnel#getState()}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
-	public final void testMonitorGetState() throws KNXException,
-		InterruptedException
+	@Test
+	@Slow
+	public final void testMonitorGetState() throws KNXException, InterruptedException
 	{
 		newMonitor();
 		assertEquals(KNXnetIPConnection.OK, mon.getState());
@@ -500,24 +494,40 @@ public class KNXnetIPTunnelTest extends TestCase
 		assertEquals(KNXnetIPConnection.OK, mon.getState());
 	}
 
+	@Test
+	void interruptedSend() throws Exception
+	{
+		init();
+		newTunnel();
+		for (int i = 0; i < 20; i++) {
+			try {
+				Thread.currentThread().interrupt();
+				t.send(frame, con);
+				fail("we are interrupted");
+				try {
+					Thread.sleep(100);
+				}
+				catch (final InterruptedException e) {}
+			}
+			catch (final InterruptedException expected) {}
+		}
+	}
+
 	private void newTunnel() throws KNXException, InterruptedException
 	{
-		t = new KNXnetIPTunnel(KNXnetIPTunnel.LINK_LAYER, Util.getLocalHost(), Util.getServer(),
-				false);
+		t = new KNXnetIPTunnel(LinkLayer, Util.getLocalHost(), Util.getServer(), false);
 		t.addConnectionListener(l);
 	}
 
 	private void newNATTunnel() throws KNXException, InterruptedException
 	{
-		tnat = new KNXnetIPTunnel(KNXnetIPTunnel.LINK_LAYER, Util.getLocalHost(), Util.getServer(),
-				true);
+		tnat = new KNXnetIPTunnel(LinkLayer, Util.getLocalHost(), Util.getServer(), true);
 		tnat.addConnectionListener(lnat);
 	}
 
 	private void newMonitor() throws KNXException, InterruptedException
 	{
-		mon = new KNXnetIPTunnel(KNXnetIPTunnel.BUSMONITOR_LAYER, Util.getLocalHost(),
-				Util.getServer(), false);
+		mon = new KNXnetIPTunnel(BusMonitorLayer, Util.getLocalHost(), Util.getServer(), false);
 		mon.addConnectionListener(lmon);
 	}
 }

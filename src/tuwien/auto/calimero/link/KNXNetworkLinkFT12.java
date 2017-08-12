@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2015 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -37,13 +37,12 @@
 package tuwien.auto.calimero.link;
 
 import tuwien.auto.calimero.DataUnitBuilder;
+import tuwien.auto.calimero.KNXAckTimeoutException;
 import tuwien.auto.calimero.KNXAddress;
+import tuwien.auto.calimero.KNXException;
+import tuwien.auto.calimero.KNXTimeoutException;
 import tuwien.auto.calimero.cemi.CEMILData;
-import tuwien.auto.calimero.exception.KNXAckTimeoutException;
-import tuwien.auto.calimero.exception.KNXException;
-import tuwien.auto.calimero.exception.KNXTimeoutException;
 import tuwien.auto.calimero.link.medium.KNXMediumSettings;
-import tuwien.auto.calimero.log.LogLevel;
 import tuwien.auto.calimero.serial.FT12Connection;
 import tuwien.auto.calimero.serial.KNXPortClosedException;
 
@@ -101,7 +100,7 @@ public class KNXNetworkLinkFT12 extends AbstractLink
 	protected KNXNetworkLinkFT12(final FT12Connection c, final KNXMediumSettings settings)
 		throws KNXException
 	{
-		super(null, c.getPortID(), settings);
+		super(c, c.getPortID(), settings);
 		cEMI = false;
 		sendCEmiAsByteArray = true;
 		conn = c;
@@ -109,34 +108,31 @@ public class KNXNetworkLinkFT12 extends AbstractLink
 		conn.addConnectionListener(notifier);
 	}
 
+	@Override
 	protected void onSend(final KNXAddress dst, final byte[] msg, final boolean waitForCon)
 		throws KNXTimeoutException, KNXLinkClosedException
 	{
 		try {
-			final boolean trace = logger.isLoggable(LogLevel.TRACE);
-			if (trace || logger.isLoggable(LogLevel.INFO))
-				logger.info("send message to " + dst + (waitForCon ? ", wait for ack" : ""));
-			if (trace)
-				logger.trace("EMI " + DataUnitBuilder.toHex(msg, " "));
+			logger.debug("send message to {}{}", dst, (waitForCon ? ", wait for ack" : ""));
+			if (logger.isTraceEnabled())
+				logger.trace("EMI {}", DataUnitBuilder.toHex(msg, " "));
 			conn.send(msg, waitForCon);
-			logger.trace("send to " + dst + " succeeded");
+			logger.trace("send to {} succeeded", dst);
 		}
-		catch (final KNXPortClosedException e) {
+		catch (final KNXPortClosedException | InterruptedException e) {
 			logger.error("send error, closing link", e);
 			close();
-			throw new KNXLinkClosedException("link closed, " + e.getMessage());
-		}
-		catch (final InterruptedException e) {
-			logger.error("send error, closing link", e);
-			close();
-			Thread.currentThread().interrupt();
+			if (e instanceof InterruptedException)
+				Thread.currentThread().interrupt();
 			throw new KNXLinkClosedException("link closed, " + e.getMessage());
 		}
 	}
 
+	@Override
 	protected void onSend(final CEMILData msg, final boolean waitForCon)
 	{}
 
+	@Override
 	protected void onClose()
 	{
 		try {
@@ -145,7 +141,6 @@ public class KNXNetworkLinkFT12 extends AbstractLink
 		catch (final Exception e) {
 			logger.error("could not switch BCU back to normal mode", e);
 		}
-		conn.close();
 	}
 
 	private void linkLayerMode() throws KNXException

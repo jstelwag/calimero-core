@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2015 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -36,8 +36,8 @@
 
 package tuwien.auto.calimero.link;
 
-import tuwien.auto.calimero.exception.KNXAckTimeoutException;
-import tuwien.auto.calimero.exception.KNXException;
+import tuwien.auto.calimero.KNXAckTimeoutException;
+import tuwien.auto.calimero.KNXException;
 import tuwien.auto.calimero.link.medium.KNXMediumSettings;
 import tuwien.auto.calimero.serial.FT12Connection;
 import tuwien.auto.calimero.serial.KNXPortClosedException;
@@ -128,18 +128,13 @@ public class KNXNetworkMonitorFT12 extends AbstractMonitor
 		}
 	}
 
+	@Override
 	protected void leaveBusmonitor() throws InterruptedException
 	{
 		try {
 			normalMode();
 		}
-		catch (final KNXAckTimeoutException e) {}
-		catch (final KNXPortClosedException e) {}
-	}
-
-	protected void onClose()
-	{
-		conn.close();
+		catch (final KNXAckTimeoutException | KNXPortClosedException e) {}
 	}
 
 	private void normalMode()

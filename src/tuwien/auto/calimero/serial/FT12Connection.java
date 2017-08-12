@@ -40,22 +40,20 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;
 import java.io.OutputStream;
-import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
-import java.util.EventListener;
 import java.util.List;
 import java.util.StringTokenizer;
+
+import org.slf4j.Logger;
 
 import tuwien.auto.calimero.CloseEvent;
 import tuwien.auto.calimero.DataUnitBuilder;
 import tuwien.auto.calimero.FrameEvent;
+import tuwien.auto.calimero.KNXAckTimeoutException;
+import tuwien.auto.calimero.KNXException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 import tuwien.auto.calimero.KNXListener;
-import tuwien.auto.calimero.exception.KNXAckTimeoutException;
-import tuwien.auto.calimero.exception.KNXException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
 import tuwien.auto.calimero.internal.EventListeners;
-import tuwien.auto.calimero.log.LogLevel;
-import tuwien.auto.calimero.log.LogManager;
 import tuwien.auto.calimero.log.LogService;
 
 /**
@@ -70,7 +68,7 @@ import tuwien.auto.calimero.log.LogService;
  *
  * @author B. Malinowsky
  */
-public class FT12Connection
+public class FT12Connection implements AutoCloseable
 {
 	/**
 	 * State of communication: in idle state, no error, ready to send.
@@ -123,7 +121,7 @@ public class FT12Connection
 	private static final int START_FIXED = 0x10;
 	private static final int END = 0x16;
 
-	private final LogService logger;
+	private final Logger logger;
 
 	// adapter for the used serial I/O connection:
 	// - on ME CDC platforms with CommConnection available, CommConnectionAdapter is used
@@ -144,7 +142,7 @@ public class FT12Connection
 	private int exchangeTimeout;
 	private int idleTimeout;
 
-	private final EventListeners listeners = new EventListeners();
+	private final EventListeners<KNXListener> listeners = new EventListeners<>();
 
 	/**
 	 * Creates a new connection to a BCU2 using the FT1.2 protocol.
@@ -156,7 +154,7 @@ public class FT12Connection
 	 * is named "FT1.2 <code>portNumber</code>", with <code>portNumber</code> being the
 	 * supplied port parameter value. If a log writer wants to receive all log events
 	 * created during establishment of this FT1.2 connection, use
-	 * {@link LogManager#getLogService(String)} before invoking this constructor and add
+	 * {@link LogService#getLogger(String)} before invoking this constructor and add
 	 * the writer.
 	 *
 	 * @param portNumber port number of the serial communication port to use; mapped to
@@ -174,10 +172,10 @@ public class FT12Connection
 	 * <p>
 	 * The baud rate is set to 19200.<br>
 	 * The associated log service to which the created instance will output logging events
-	 * is named "FT1.2 <code>portId</code>", with <code>portId</code> being the supplied
+	 * is named "calimero.serial.ft12.<code>portId</code>", with <code>portId</code> being the supplied
 	 * port identifier. If a log writer wants to receive all log events created during
 	 * establishment of this FT1.2 connection, use
-	 * {@link LogManager#getLogService(String)} before invoking this constructor and add
+	 * {@link LogService#getLogger(String)} before invoking this constructor and add
 	 * the writer.
 	 *
 	 * @param portId port identifier of the serial communication port to use
@@ -207,10 +205,9 @@ public class FT12Connection
 		this(portId, portId, baudrate);
 	}
 
-	private FT12Connection(final String originalPortId, final String portId,
-		final int baudrate) throws KNXException
+	private FT12Connection(final String originalPortId, final String portId, final int baudrate) throws KNXException
 	{
-		logger = LogManager.getManager().getLogService("FT1.2 " + originalPortId);
+		logger = LogService.getLogger("calimero.serial.ft12." + originalPortId);
 		open(portId, baudrate);
 		try {
 			sendReset();
@@ -247,14 +244,14 @@ public class FT12Connection
 		}
 		if (SerialComAdapter.isAvailable()) {
 			final String[] prefixes = defaultPortPrefixes();
-			final List l = new ArrayList(10);
+			final List<String> l = new ArrayList<>(10);
 			for (int k = 0; k < prefixes.length; k++) {
 				final String prefix = prefixes[k];
 				for (int i = 0; i < 10; ++i)
 					if (SerialComAdapter.portExists(prefix + i))
 						l.add(prefix + i);
 			}
-			return (String[]) l.toArray(new String[l.size()]);
+			return l.toArray(new String[l.size()]);
 		}
 		// skip other possible adapters for now, and return empty list...
 		return new String[0];
@@ -359,9 +356,7 @@ public class FT12Connection
 		boolean ack = false;
 		try {
 			for (int i = 0; i <= REPEAT_LIMIT; ++i) {
-				if (logger.isLoggable(LogLevel.TRACE))
-					logger.trace("sending FT1.2 frame, " + (blocking ? "" : "non-")
-							+ "blocking, attempt " + (i + 1));
+				logger.trace("sending FT1.2 frame, {}blocking, attempt {}", (blocking ? "" : "non-"), (i + 1));
 				sendData(frame);
 				if (!blocking || waitForAck()) {
 					ack = true;
@@ -391,6 +386,7 @@ public class FT12Connection
 	 * listeners receive. <br>
 	 * If this connection endpoint is already closed, no action is performed.
 	 */
+	@Override
 	public void close()
 	{
 		close(true, "client request");
@@ -413,101 +409,26 @@ public class FT12Connection
 			logger.warn("failed to close all serial I/O resources", e);
 		}
 		fireConnectionClosed(user, reason);
-		LogManager.getManager().removeLogService(logger.getName());
 	}
 
 	private void open(final String portId, final int baudrate) throws KNXException
 	{
-		adapter = createAdapter(portId, baudrate);
+		calcTimeouts(baudrate);
+		adapter = LibraryAdapter.open(logger, portId, baudrate, idleTimeout);
 		port = portId;
 		is = adapter.getInputStream();
 		os = adapter.getOutputStream();
 		calcTimeouts(adapter.getBaudRate());
-		(receiver = new Receiver()).start();
+		receiver = new Receiver();
+		receiver.start();
 		state = OK;
 		logger.info("access supported, opened serial port " + portId);
-	}
-
-	private LibraryAdapter createAdapter(final String portId, final int baudrate)
-		throws KNXException
-	{
-		boolean available = false;
-		// check for ME CDC platform and available serial communication port
-		// protocol support for communication ports is optional in CDC
-		if (CommConnectionAdapter.isAvailable()) {
-			available = true;
-			logger.info("open ME CDC serial port connection (CommConnection)");
-			try {
-				return new CommConnectionAdapter(logger, portId, baudrate);
-			}
-			catch (final KNXException e) {
-				logger.warn("ME CDC serial port access failed", e);
-			}
-		}
-		// check internal support for serial port access
-		// protocol support available for Win 32/64 platforms
-		// (so we provide serial port access at least on platforms with ETS)
-		if (SerialComAdapter.isAvailable()) {
-			available = true;
-			logger.info("open Calimero 2 native serial port connection (serialcom)");
-			SerialComAdapter conn = null;
-			try {
-				conn = new SerialComAdapter(logger, portId);
-				conn.setBaudRate(baudrate);
-				calcTimeouts(conn.getBaudRate());
-				// In Windows Embedded CE, the read interval timeout starts immediately
-				conn.setTimeouts(new SerialComAdapter.Timeouts(idleTimeout, 0, 0, 0, 0));
-				conn.setParity(SerialComAdapter.PARITY_EVEN);
-				conn.setControl(SerialComAdapter.STOPBITS, SerialComAdapter.ONE_STOPBIT);
-				conn.setControl(SerialComAdapter.DATABITS, 8);
-				conn.setControl(SerialComAdapter.FLOWCTRL, SerialComAdapter.FLOWCTRL_NONE);
-				logger.info("setup serial port: baudrate " + conn.getBaudRate()
-					+ ", even parity, " + conn.getControl(SerialComAdapter.DATABITS)
-					+ " databits, " + conn.getControl(SerialComAdapter.STOPBITS)
-					+ " stopbits, timeouts: " + conn.getTimeouts());
-				return conn;
-			}
-			catch (final IOException e) {
-				if (conn != null)
-					conn.close();
-				logger.warn("native serial port access failed", e);
-			}
-		}
-		try {
-			final Class c = Class.forName("tuwien.auto.calimero.serial.RxtxAdapter");
-			available = true;
-			// check whether a rxtx library is hanging around somewhere
-			logger.info("open rxtx library serial port connection");
-			return (LibraryAdapter) c.getConstructors()[0].newInstance(new Object[] {
-				logger, portId, new Integer(baudrate) });
-		}
-		catch (final ClassNotFoundException e) {
-			logger.warn("rxtx library adapter not found");
-		}
-		catch (final SecurityException e) {
-			logger.error("rxtx library adapter access denied", e);
-		}
-		catch (final InvocationTargetException e) {
-			logger.error("initalizing rxtx serial port", e.getCause());
-		}
-		catch (final Exception e) {
-			// InstantiationException, NoSuchMethodException,
-			// IllegalAccessException, IllegalArgumentException
-			logger.warn("rxtx serial port access failed", e);
-		}
-		catch (final NoClassDefFoundError e) {
-			logger.error("no rxtx library classes found", e);
-		}
-		if (available)
-			throw new KNXException("can not open serial port " + portId);
-		throw new KNXException("no serial adapter available");
 	}
 
 	private void sendReset() throws KNXPortClosedException, KNXAckTimeoutException
 	{
 		try {
-			final byte[] reset = new byte[] { START_FIXED, INITIATOR | RESET, INITIATOR | RESET,
-				END };
+			final byte[] reset = new byte[] { START_FIXED, INITIATOR | RESET, INITIATOR | RESET, END };
 			for (int i = 0; i <= REPEAT_LIMIT; ++i) {
 				logger.trace("send reset to BCU");
 				state = ACK_PENDING;
@@ -580,17 +501,7 @@ public class FT12Connection
 	{
 		final int initiator = user ? CloseEvent.USER_REQUEST : CloseEvent.INTERNAL;
 		final CloseEvent ce = new CloseEvent(this, initiator, reason);
-		final EventListener[] el = listeners.listeners();
-		for (int i = 0; i < el.length; i++) {
-			final KNXListener l = (KNXListener) el[i];
-			try {
-				l.connectionClosed(ce);
-			}
-			catch (final RuntimeException e) {
-				removeConnectionListener(l);
-				logger.error("removed event listener", e);
-			}
-		}
+		listeners.fire(l -> l.connectionClosed(ce));
 	}
 
 	private void calcTimeouts(final int baudrate)
@@ -629,6 +540,7 @@ public class FT12Connection
 			setDaemon(true);
 		}
 
+		@Override
 		public void run()
 		{
 			try {
@@ -647,8 +559,7 @@ public class FT12Connection
 						else if (c == START_FIXED)
 							readShortFrame();
 						else
-							logger.trace("received unexpected start byte 0x"
-									+ Integer.toHexString(c) + " - ignored");
+							logger.trace("received unexpected start byte 0x" + Integer.toHexString(c) + " - ignored");
 					}
 				}
 			}
@@ -692,8 +603,7 @@ public class FT12Connection
 			final byte[] buf = new byte[len + 4];
 			// read rest of frame, check header, ctrl, and end tag
 			final int read = is.read(buf);
-			if (read == len + 4 && (buf[0] & 0xff) == len && (buf[1] & 0xff) == START
-					&& (buf[len + 3] & 0xff) == END) {
+			if (read == len + 4 && (buf[0] & 0xff) == len && (buf[1] & 0xff) == START && (buf[len + 3] & 0xff) == END) {
 				final byte chk = buf[buf.length - 2];
 				if (!checkCtrlField(buf[2] & 0xff, chk))
 					return false;
@@ -713,8 +623,7 @@ public class FT12Connection
 				}
 			}
 			else
-				logger.warn("invalid frame, discarded " + read + " bytes: "
-						+ DataUnitBuilder.toHex(buf, " "));
+				logger.warn("invalid frame, discarded " + read + " bytes: " + DataUnitBuilder.toHex(buf, " "));
 			return false;
 		}
 
@@ -750,17 +659,7 @@ public class FT12Connection
 		private void fireFrameReceived(final byte[] frame)
 		{
 			final FrameEvent fe = new FrameEvent(this, frame);
-			final EventListener[] el = listeners.listeners();
-			for (int i = 0; i < el.length; i++) {
-				final KNXListener l = (KNXListener) el[i];
-				try {
-					l.frameReceived(fe);
-				}
-				catch (final RuntimeException e) {
-					removeConnectionListener(l);
-					logger.error("removed event listener", e);
-				}
-			}
+			listeners.fire(l -> l.frameReceived(fe));
 		}
 	}
 }

@@ -40,8 +40,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
 
-import tuwien.auto.calimero.exception.KNXException;
-import tuwien.auto.calimero.log.LogService;
+import org.slf4j.Logger;
+
+import tuwien.auto.calimero.KNXException;
 
 /**
  * Adapter for Java ME CDC javax.microedition.io.CommConnection.
@@ -51,14 +52,14 @@ import tuwien.auto.calimero.log.LogService;
  */
 class CommConnectionAdapter extends LibraryAdapter
 {
-	private static final Class connector;
+	private static final Class<?> connector;
 
 	private Object conn;
 	private InputStream is;
 	private OutputStream os;
 
 	static {
-		Class clazz = null;
+		Class<?> clazz = null;
 		try {
 			clazz = Class.forName("javax.microedition.io.Connector");
 		}
@@ -66,7 +67,7 @@ class CommConnectionAdapter extends LibraryAdapter
 		connector = clazz;
 	}
 
-	CommConnectionAdapter(final LogService logger, final String portId, final int baudrate)
+	CommConnectionAdapter(final Logger logger, final String portId, final int baudrate)
 		throws KNXException
 	{
 		super(logger);
@@ -89,6 +90,7 @@ class CommConnectionAdapter extends LibraryAdapter
 		return connector != null;
 	}
 
+	@Override
 	public void close()
 	{
 		try {
@@ -100,6 +102,7 @@ class CommConnectionAdapter extends LibraryAdapter
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.serial.LibraryAdapter#getInputStream()
 	 */
+	@Override
 	public InputStream getInputStream()
 	{
 		return is;
@@ -108,6 +111,7 @@ class CommConnectionAdapter extends LibraryAdapter
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.serial.LibraryAdapter#getOutputStream()
 	 */
+	@Override
 	public OutputStream getOutputStream()
 	{
 		return os;

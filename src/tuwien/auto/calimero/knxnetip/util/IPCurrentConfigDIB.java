@@ -41,8 +41,8 @@ import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 
 /**
  * Represents an IP current configuration description information block. DIBs of this type are used
@@ -119,6 +119,7 @@ public final class IPCurrentConfigDIB extends DIB
 		this.gw = gateway != null ? gateway.getAddress() : new byte[4];
 		this.dhcp = dhcp != null ? dhcp.getAddress() : new byte[4];
 
+		// NYI JRE >= 1.5: should use Integer.bitCount()
 		if (ipAssignmentMethod < 0 || ipAssignmentMethod > 0x15)
 			throw new KNXIllegalArgumentException("IP assignment method out of range [0..b1111]: "
 					+ ipAssignmentMethod);
@@ -168,6 +169,7 @@ public final class IPCurrentConfigDIB extends DIB
 	/* (non-Javadoc)
 	 * @see java.lang.Object#toString()
 	 */
+	@Override
 	public String toString()
 	{
 		try {
@@ -183,6 +185,7 @@ public final class IPCurrentConfigDIB extends DIB
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.knxnetip.util.DIB#toByteArray()
 	 */
+	@Override
 	public byte[] toByteArray()
 	{
 		final byte[] buf = super.toByteArray();
@@ -206,7 +209,8 @@ public final class IPCurrentConfigDIB extends DIB
 		try {
 			return (Inet4Address) InetAddress.getByAddress(addr);
 		}
-		catch (final UnknownHostException ignore) {}
-		return null;
+		catch (final UnknownHostException ignore) {
+			throw new IllegalArgumentException("illegal length of IPv4 address", ignore);
+		}
 	}
 }

@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2015 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -39,7 +39,7 @@ package tuwien.auto.calimero.dptxlator;
 import java.util.HashMap;
 import java.util.Map;
 
-import tuwien.auto.calimero.exception.KNXFormatException;
+import tuwien.auto.calimero.KNXFormatException;
 
 /**
  * Translator for KNX DPTs with main number 9, type <b>2-byte float</b>.
@@ -180,10 +180,10 @@ public class DPTXlator2ByteFloat extends DPTXlator
 	public static final DPT DPT_WIND_SPEED_KMH = new DPT("9.028", "Wind speed", "0", "670760.96",
 			"km/h");
 
-	private static final Map types;
+	private static final Map<String, DPT> types;
 
 	static {
-		types = new HashMap(25);
+		types = new HashMap<>(25);
 		types.put(DPT_TEMPERATURE.getID(), DPT_TEMPERATURE);
 		types.put(DPT_TEMPERATURE_DIFFERENCE.getID(), DPT_TEMPERATURE_DIFFERENCE);
 		types.put(DPT_TEMPERATURE_GRADIENT.getID(), DPT_TEMPERATURE_GRADIENT);
@@ -250,40 +250,21 @@ public class DPTXlator2ByteFloat extends DPTXlator
 	}
 
 	/**
-	 * Returns the first translation item formatted as float.
-	 * <p>
-	 *
-	 * @return value as float
-	 */
-	public final float getValueFloat()
-	{
-		return (float) fromDPT(0);
-	}
-
-	/**
 	 * Returns the first translation item formatted as double.
 	 *
-	 * @return value as double
-	 */
-	public final double getValueDouble()
-	{
-		return fromDPT(0);
-	}
-
-	/**
-	 * Returns the first translation item formatted as double.
-	 *
-	 * @return numeric value
+	 * @return numeric value as double
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getNumericValue()
 	 */
+	@Override
 	public final double getNumericValue()
 	{
-		return getValueDouble();
+		return fromDPT(0);
 	}
 
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getAllValues()
 	 */
+	@Override
 	public String[] getAllValues()
 	{
 		final String[] buf = new String[data.length / 2];
@@ -295,7 +276,8 @@ public class DPTXlator2ByteFloat extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getSubTypes()
 	 */
-	public Map getSubTypes()
+	@Override
+	public Map<String, DPT> getSubTypes()
 	{
 		return types;
 	}
@@ -304,7 +286,7 @@ public class DPTXlator2ByteFloat extends DPTXlator
 	 * @return the subtypes of the 2-byte float translator type
 	 * @see DPTXlator#getSubTypesStatic()
 	 */
-	protected static Map getSubTypesStatic()
+	protected static Map<String, DPT> getSubTypesStatic()
 	{
 		return types;
 	}
@@ -347,6 +329,7 @@ public class DPTXlator2ByteFloat extends DPTXlator
 		dst[2 * index + 1] = ubyte(m);
 	}
 
+	@Override
 	protected void toDPT(final String value, final short[] dst, final int index) throws KNXFormatException
 	{
 		try {

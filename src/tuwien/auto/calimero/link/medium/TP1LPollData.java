@@ -40,8 +40,8 @@ import java.io.ByteArrayInputStream;
 
 import tuwien.auto.calimero.GroupAddress;
 import tuwien.auto.calimero.IndividualAddress;
+import tuwien.auto.calimero.KNXFormatException;
 import tuwien.auto.calimero.Priority;
-import tuwien.auto.calimero.exception.KNXFormatException;
 
 /**
  * L-polldata frame format on TP1 communication medium.
@@ -102,6 +102,7 @@ public class TP1LPollData extends RawFrameBase
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.link.medium.RawFrameBase#toString()
 	 */
+	@Override
 	public String toString()
 	{
 		return super.toString() + " exp. polldata " + expData;

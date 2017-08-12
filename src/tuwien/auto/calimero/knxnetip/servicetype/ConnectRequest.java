@@ -39,7 +39,7 @@ package tuwien.auto.calimero.knxnetip.servicetype;
 import java.io.ByteArrayOutputStream;
 import java.net.InetAddress;
 
-import tuwien.auto.calimero.exception.KNXFormatException;
+import tuwien.auto.calimero.KNXFormatException;
 import tuwien.auto.calimero.knxnetip.util.CRI;
 import tuwien.auto.calimero.knxnetip.util.HPAI;
 
@@ -152,6 +152,7 @@ public class ConnectRequest extends ServiceType
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.knxnetip.servicetype.ServiceType#getStructLength()
 	 */
+	@Override
 	int getStructLength()
 	{
 		return ctrlPt.getStructLength() + dataPt.getStructLength() + cri.getStructLength();
@@ -161,6 +162,7 @@ public class ConnectRequest extends ServiceType
 	 * @see tuwien.auto.calimero.knxnetip.servicetype.ServiceType#toByteArray
 	 *      (java.io.ByteArrayOutputStream)
 	 */
+	@Override
 	byte[] toByteArray(final ByteArrayOutputStream os)
 	{
 		byte[] buf = ctrlPt.toByteArray();

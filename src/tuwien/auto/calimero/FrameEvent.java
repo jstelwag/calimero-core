@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2011 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -37,6 +37,7 @@
 package tuwien.auto.calimero;
 
 import java.util.EventObject;
+import java.util.concurrent.atomic.AtomicLong;
 
 import tuwien.auto.calimero.cemi.CEMI;
 import tuwien.auto.calimero.cemi.CEMIFactory;
@@ -47,26 +48,30 @@ import tuwien.auto.calimero.cemi.CEMIFactory;
  * Depending on the type of frame supplied on creation of a new frame event, either
  * {@link #getFrame()} or {@link #getFrameBytes()} has to be used to retrieve the
  * associated frame.
- * 
+ *
  * @see KNXListener
  */
 public class FrameEvent extends EventObject
 {
 	private static final long serialVersionUID = 1L;
 
+	private static final AtomicLong idCounter = new AtomicLong();
+
+	private final long id;
 	private final CEMI c;
 	private final byte[] b;
 
 	/**
 	 * Creates a new frame event for <code>frame</code>.
 	 * <p>
-	 * 
+	 *
 	 * @param source the creator of this event
 	 * @param frame cEMI frame
 	 */
 	public FrameEvent(final Object source, final CEMI frame)
 	{
 		super(source);
+		id = idCounter.incrementAndGet();
 		c = frame;
 		b = null;
 	}
@@ -74,36 +79,39 @@ public class FrameEvent extends EventObject
 	/**
 	 * Creates a new frame event for <code>frame</code>.
 	 * <p>
-	 * 
+	 *
 	 * @param source the creator of this event
 	 * @param frame EMI2 L-data frame
 	 */
 	public FrameEvent(final Object source, final byte[] frame)
 	{
 		super(source);
+		id = idCounter.incrementAndGet();
 		b = frame;
 		c = null;
 	}
-	
+
 	/**
 	 * Returns the cEMI frame, if supplied at event creation.
 	 * <p>
-	 * 
+	 *
 	 * @return cEMI frame object, or <code>null</code>
 	 */
 	public final CEMI getFrame()
 	{
 		return CEMIFactory.copy(c);
 	}
-	
+
 	/**
 	 * Returns the frame as byte array, if supplied at event creation.
 	 * <p>
-	 * 
+	 *
 	 * @return copy of frame as byte array, or <code>null</code>
 	 */
 	public final byte[] getFrameBytes()
 	{
-		return b != null ? (byte[]) b.clone() : null;
+		return b != null ? b.clone() : null;
 	}
+
+	public final long id() { return id; }
 }

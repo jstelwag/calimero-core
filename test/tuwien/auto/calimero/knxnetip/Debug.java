@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2011 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -53,12 +53,15 @@ import tuwien.auto.calimero.link.medium.TP1LPollData;
  */
 public final class Debug
 {
+	private static boolean printToSystemOut = false;
+
 	private Debug()
 	{}
 
-	public static void printLData(final CEMILData f)
+	public static void printLData(final String prefix, final CEMILData f)
 	{
 		final StringBuffer buf = new StringBuffer();
+		buf.append(prefix);
 		buf.append("hopcount=" + f.getHopCount());
 		buf.append(", dst=" + f.getDestination());
 		buf.append(", prio=" + f.getPriority());
@@ -72,10 +75,12 @@ public final class Debug
 		buf.append("\ntoString(): ");
 		buf.append(f.toString());
 		buf.append(": ").append(DataUnitBuilder.decode(f.getPayload(), f.getDestination()));
-		synchronized (System.out) {
-			System.out.println(buf);
-			System.out.println();
-		}
+		print(buf);
+	}
+
+	public static void printLData(final CEMILData f)
+	{
+		printLData("", f);
 	}
 
 	public static void printMData(final CEMIDevMgmt f)
@@ -92,10 +97,7 @@ public final class Debug
 		buf.append("DevMgmt-data").append(Util.toHexDec(f.getPayload()));
 		buf.append("\ntoString(): ");
 		buf.append(f.toString());
-		synchronized (System.out) {
-			System.out.println(buf);
-			System.out.println();
-		}
+		print(buf);
 	}
 
 	public static void printMonData(final CEMIBusMon ind)
@@ -111,16 +113,13 @@ public final class Debug
 		buf.append("Mon-data").append(Util.toHexDec(ind.getPayload()));
 		buf.append("\ntoString(): ");
 		buf.append(ind.toString());
-		synchronized (System.out) {
-			System.out.println(buf);
-			System.out.println();
-		}
+		print(buf);
 	}
 
 	public static void printTP1Frame(final RawFrame tp1)
 	{
 		final StringBuffer buf = new StringBuffer();
-		String type;
+		final String type;
 		switch (tp1.getFrameType()) {
 		case RawFrame.ACK_FRAME:
 			type = "ack";
@@ -167,17 +166,28 @@ public final class Debug
 			buf.append(", rep=" + f.getExpectedDataLength());
 			buf.append(", chksum=" + f.getChecksum());
 		}
-		synchronized (System.out) {
-			System.out.print(buf);
-			if (tp1 instanceof RawFrameBase)
-				Util.out("tpdu", ((TP1LData) tp1).getTPDU());
-			System.out.println();
-			System.out.print("toString: " + tp1.toString());
-			if (tp1 instanceof RawFrameBase)
-				System.out.println(": "
-					+ DataUnitBuilder.decode(((TP1LData) tp1).getTPDU(), ((TP1LData) tp1)
-						.getDestination()));
-			System.out.println();
+		if (printToSystemOut) {
+			synchronized (System.out) {
+				System.out.print(buf);
+				if (tp1 instanceof RawFrameBase)
+					Util.out("tpdu", ((TP1LData) tp1).getTPDU());
+				System.out.println();
+				System.out.print("toString: " + tp1.toString());
+				if (tp1 instanceof RawFrameBase)
+					System.out.println(": "
+							+ DataUnitBuilder.decode(((TP1LData) tp1).getTPDU(), ((TP1LData) tp1).getDestination()));
+				System.out.println();
+			}
+		}
+	}
+
+	private static void print(final CharSequence buf)
+	{
+		if (printToSystemOut) {
+			synchronized (System.out) {
+				System.out.println(buf);
+				System.out.println();
+			}
 		}
 	}
 }

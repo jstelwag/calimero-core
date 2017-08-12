@@ -40,7 +40,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-import tuwien.auto.calimero.log.LogService;
+import org.slf4j.Logger;
 
 /**
  * Adapter for serial communication using a Calimero library platform dependent library API.
@@ -51,6 +51,7 @@ import tuwien.auto.calimero.log.LogService;
  *
  * @author B. Malinowsky
  */
+@SuppressWarnings("checkstyle:finalparameters")
 class SerialComAdapter extends LibraryAdapter
 {
 	// Notes:
@@ -143,6 +144,7 @@ class SerialComAdapter extends LibraryAdapter
 		/* (non-Javadoc)
 		 * @see java.lang.Object#toString()
 		 */
+		@Override
 		public String toString()
 		{
 			return "read " + readInterval + " read total " + readTotalMultiplier + " constant "
@@ -166,7 +168,7 @@ class SerialComAdapter extends LibraryAdapter
 		loaded = b;
 	}
 
-	SerialComAdapter(final LogService logger, final String portId) throws IOException
+	SerialComAdapter(final Logger logger, final String portId) throws IOException
 	{
 		super(logger);
 		if (portId == null)
@@ -209,6 +211,7 @@ class SerialComAdapter extends LibraryAdapter
 	 * Like CommConnection in Java ME
 	 * @see javax.microedition.io.CommConnection#setBaudRate(int)
 	 */
+	@Override
 	public final void setBaudRate(final int baudrate)
 	{
 		try {
@@ -223,6 +226,7 @@ class SerialComAdapter extends LibraryAdapter
 	 * Like CommConnection in Java ME
 	 * @see javax.microedition.io.CommConnection#getBaudRate()
 	 */
+	@Override
 	public final int getBaudRate()
 	{
 		try {
@@ -266,6 +270,7 @@ class SerialComAdapter extends LibraryAdapter
 
 	native int getControl(int control) throws IOException;
 
+	@Override
 	public InputStream getInputStream()
 	{
 		if (fd == INVALID_HANDLE)
@@ -274,6 +279,7 @@ class SerialComAdapter extends LibraryAdapter
 		return new PortInputStream(this);
 	}
 
+	@Override
 	public OutputStream getOutputStream()
 	{
 		if (fd == INVALID_HANDLE)
@@ -283,6 +289,7 @@ class SerialComAdapter extends LibraryAdapter
 	}
 
 	// any open input/output stream accessing this port becomes unusable
+	@Override
 	public final void close()
 	{
 		try {

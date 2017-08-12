@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2015 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -37,7 +37,6 @@
 package tuwien.auto.calimero.link.medium;
 
 import tuwien.auto.calimero.IndividualAddress;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
 
 /**
  * Provides settings necessary for communication on TP1 (twisted pair 1) medium.
@@ -71,43 +70,15 @@ public class TPSettings extends KNXMediumSettings
 		super(null);
 	}
 
-	/**
-	 * @deprecated Use {@link TPSettings#TPSettings(IndividualAddress)}
-	 * @param device -
-	 * @param mediumTP1 -
-	 */
-	public TPSettings(final IndividualAddress device, final boolean mediumTP1)
-	{
-		super(device);
-		if (!mediumTP1)
-			throw new KNXIllegalArgumentException("TP0 no longer supported");
-	}
-
-	/**
-	 * @deprecated Use {@link TPSettings#TPSettings()}
-	 * @param mediumTP1 -
-	 */
-	public TPSettings(final boolean mediumTP1)
-	{
-		super(null);
-		if (!mediumTP1)
-			throw new KNXIllegalArgumentException("TP0 no longer supported");
-	}
-
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.link.medium.KNXMediumSettings#getMedium()
-	 */
+	@Override
 	public int getMedium()
 	{
 		return MEDIUM_TP1;
 	}
 
-	/**
-	 * @deprecated No longer necessary
-	 * @return <code>true</code> for TP1
-	 */
-	public final boolean isTP1()
+	@Override
+	public int timeFactor()
 	{
-		return true;
+		return 20;
 	}
 }

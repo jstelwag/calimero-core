@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2015 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -36,31 +36,40 @@
 
 package tuwien.auto.calimero.knxnetip;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 
-import junit.framework.TestCase;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import tag.KnxnetIP;
+import tag.Slow;
 import tuwien.auto.calimero.CloseEvent;
 import tuwien.auto.calimero.FrameEvent;
 import tuwien.auto.calimero.IndividualAddress;
+import tuwien.auto.calimero.KNXException;
 import tuwien.auto.calimero.KNXListener;
+import tuwien.auto.calimero.KNXTimeoutException;
 import tuwien.auto.calimero.Util;
 import tuwien.auto.calimero.cemi.CEMI;
 import tuwien.auto.calimero.cemi.CEMIDevMgmt;
-import tuwien.auto.calimero.exception.KNXException;
-import tuwien.auto.calimero.exception.KNXTimeoutException;
 import tuwien.auto.calimero.knxnetip.KNXnetIPConnection.BlockingMode;
-import tuwien.auto.calimero.log.LogManager;
 
 /**
  * @author B. Malinowsky
  */
-public class KNXnetIPDevMgmtTest extends TestCase
+@KnxnetIP
+public class KNXnetIPDevMgmtTest
 {
-//	private static KNXnetIPConnection.BlockingMode noblock =
-//		KNXnetIPConnection.NONBLOCKING;
-//	private static KNXnetIPConnection.BlockingMode ack = KNXnetIPConnection.WAIT_FOR_ACK;
-	private static KNXnetIPConnection.BlockingMode con = KNXnetIPConnection.WAIT_FOR_CON;
+//	private static KNXnetIPConnection.BlockingMode noblock = KNXnetIPConnection.BlockingMode.NonBlocking;
+//	private static KNXnetIPConnection.BlockingMode ack = KNXnetIPConnection.BlockingMode.WaitForAck;
+	private static KNXnetIPConnection.BlockingMode con = KNXnetIPConnection.BlockingMode.WaitForCon;
 
 	private KNXnetIPDevMgmt m;
 	private KNXListenerImpl l;
@@ -73,6 +82,7 @@ public class KNXnetIPDevMgmtTest extends TestCase
 		boolean closed;
 		CEMI received;
 
+		@Override
 		public void frameReceived(final FrameEvent e)
 		{
 			assertNotNull(e);
@@ -91,6 +101,7 @@ public class KNXnetIPDevMgmtTest extends TestCase
 				}
 		}
 
+		@Override
 		public void connectionClosed(final CloseEvent e)
 		{
 			assertNotNull(e);
@@ -101,50 +112,31 @@ public class KNXnetIPDevMgmtTest extends TestCase
 		}
 	}
 
-	/**
-	 * @param name name of test case
-	 */
-	public KNXnetIPDevMgmtTest(final String name)
+	@BeforeEach
+	void init() throws Exception
 	{
-		super(name);
-	}
-
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#setUp()
-	 */
-	protected void setUp() throws Exception
-	{
-		super.setUp();
 		l = new KNXListenerImpl();
-
-		LogManager.getManager().addWriter(null, Util.getLogWriter());
-
 		// pid 52 = individual address
 		frame = new CEMIDevMgmt(CEMIDevMgmt.MC_PROPREAD_REQ, 11, 1, 52, 1, 1);
 		// pid 57 = current ip address
 		frame2 = new CEMIDevMgmt(CEMIDevMgmt.MC_PROPREAD_REQ, 11, 1, 57, 1, 1);
 	}
 
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#tearDown()
-	 */
-	protected void tearDown() throws Exception
+	@AfterEach
+	void tearDown() throws Exception
 	{
 		if (m != null) {
 			m.close();
 		}
-		LogManager.getManager().removeWriter(null, Util.getLogWriter());
-		super.tearDown();
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.KNXnetIPDevMgmt#send
-	 * (tuwien.auto.calimero.cemi.CEMI,
-	 * tuwien.auto.calimero.knxnetip.KNXnetIPConnection.BlockingMode)}.
+	 * Test method for {@link KNXnetIPDevMgmt#send(CEMI, KNXnetIPConnection.BlockingMode)}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testSend() throws KNXException, InterruptedException
 	{
 		newMgmt();
@@ -153,7 +145,7 @@ public class KNXnetIPDevMgmtTest extends TestCase
 	}
 
 	private void doSend(final CEMIDevMgmt f, final BlockingMode mode, final boolean positiveResponse)
-		throws KNXTimeoutException, KNXConnectionClosedException
+		throws KNXTimeoutException, KNXConnectionClosedException, InterruptedException
 	{
 		l.received = null;
 		m.send(f, mode);
@@ -165,12 +157,12 @@ public class KNXnetIPDevMgmtTest extends TestCase
 
 	/**
 	 * Test method for
-	 * {@link tuwien.auto.calimero.knxnetip.KNXnetIPDevMgmt#KNXnetIPDevMgmt
-	 * (java.net.InetSocketAddress, java.net.InetSocketAddress, boolean)}.
+	 * {@link KNXnetIPDevMgmt#KNXnetIPDevMgmt(java.net.InetSocketAddress, java.net.InetSocketAddress, boolean)}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testKNXnetIPDevMgmt() throws KNXException, InterruptedException
 	{
 		newMgmt();
@@ -178,11 +170,12 @@ public class KNXnetIPDevMgmtTest extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.KNXnetIPDevMgmt#close()}.
+	 * Test method for {@link KNXnetIPDevMgmt#close()}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testClose() throws KNXException, InterruptedException
 	{
 		newMgmt();
@@ -197,12 +190,12 @@ public class KNXnetIPDevMgmtTest extends TestCase
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.knxnetip.KNXnetIPDevMgmt#getRemoteAddress()}.
+	 * Test method for {@link KNXnetIPDevMgmt#getRemoteAddress()}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testGetRemoteAddress() throws KNXException, InterruptedException
 	{
 		newMgmt();
@@ -213,22 +206,23 @@ public class KNXnetIPDevMgmtTest extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.KNXnetIPDevMgmt#getState()}.
+	 * Test method for {@link KNXnetIPDevMgmt#getState()}.
 	 *
 	 * @throws InterruptedException on interrupted thread
 	 * @throws KNXException
 	 */
-	public final void testGetState() throws InterruptedException,
-		KNXException
+	@Test
+	@Slow
+	public final void testGetState() throws InterruptedException, KNXException
 	{
 		newMgmt();
 		assertEquals(KNXnetIPConnection.OK, m.getState());
 		System.out.println();
 		System.out.println("Testing heartbeat, will take some minutes !!!");
 		System.out.println("...");
-		// give some seconds space for delay so we're on the save side
+		// give some seconds space for delay so we're on the safe side
 		Thread.sleep(4000);
-		Thread.sleep(6000);
+		Thread.sleep(60000);
 		assertEquals(KNXnetIPConnection.OK, m.getState());
 		Thread.sleep(60000);
 		assertEquals(KNXnetIPConnection.OK, m.getState());
@@ -239,5 +233,4 @@ public class KNXnetIPDevMgmtTest extends TestCase
 		m = new KNXnetIPDevMgmt(Util.getLocalHost(), Util.getServer(), false);
 		m.addConnectionListener(l);
 	}
-
 }

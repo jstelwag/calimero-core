@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2011 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -47,7 +47,7 @@ import tuwien.auto.calimero.KNXListener;
  * Background: a platform's network interface has the option to send multicast
  * datagrams back to the local socket of the sender; setting the socket's loopback mode is
  * only considered as request and does not have to be followed rigorously.<br>
- * 
+ *
  * @author B. Malinowsky
  * @see KNXnetIPRouting
  */
@@ -56,8 +56,10 @@ public interface RoutingListener extends KNXListener
 	/**
 	 * Informs about the loss of messages in the KNXnet/IP router.
 	 * <p>
-	 * 
+	 *
 	 * @param e event with lost message information
 	 */
 	void lostMessage(LostMessageEvent e);
+
+	void routingBusy(RoutingBusyEvent e);
 }

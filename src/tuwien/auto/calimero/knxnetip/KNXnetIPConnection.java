@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2011 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -38,10 +38,10 @@ package tuwien.auto.calimero.knxnetip;
 
 import java.net.InetSocketAddress;
 
+import tuwien.auto.calimero.KNXIllegalStateException;
 import tuwien.auto.calimero.KNXListener;
+import tuwien.auto.calimero.KNXTimeoutException;
 import tuwien.auto.calimero.cemi.CEMI;
-import tuwien.auto.calimero.exception.KNXIllegalStateException;
-import tuwien.auto.calimero.exception.KNXTimeoutException;
 
 /**
  * Interface for working with KNX networks over an IP network connection.
@@ -56,9 +56,9 @@ import tuwien.auto.calimero.exception.KNXTimeoutException;
  * server. If the message is not responded to within a timeout of 10 seconds, it is
  * repeated 3 times, and on no response the connection will be terminated.
  * <p>
- * Log information by this connection is provided using the log service with the name
+ * Log information of this connection is provided using a logger in the namespace "calimero.knxnetip" and the name
  * obtained from {@link KNXnetIPConnection#getName()}.
- * 
+ *
  * @author B. Malinowsky
  * @see KNXnetIPTunnel
  * @see KNXnetIPDevMgmt
@@ -66,11 +66,10 @@ import tuwien.auto.calimero.exception.KNXTimeoutException;
  * @see KNXListener
  * @see CEMI
  */
-public interface KNXnetIPConnection
+public interface KNXnetIPConnection extends AutoCloseable
 {
 	/**
 	 * Identifier for KNXnet/IP protocol version 1.0.
-	 * <p>
 	 */
 	// same as in KNXnetIPHeader type
 	int KNXNETIP_VERSION_10 = 0x10;
@@ -79,63 +78,39 @@ public interface KNXnetIPConnection
 	 * KNXnet/IP default transport layer port number (port {@value #DEFAULT_PORT}) used
 	 * for a communication endpoint (besides, this is the fixed port number used for
 	 * discovery and routing).
-	 * <p>
 	 */
 	int DEFAULT_PORT = 3671;
 
 	/**
 	 * State of communication: in idle state, no error, ready to send.
-	 * <p>
 	 */
 	int OK = 0;
 
 	/**
 	 * State of communication: in closed state, no send possible.
-	 * <p>
 	 */
 	int CLOSED = 1;
 
 	/**
-	 * Type for blocking mode used in
-	 * {@link KNXnetIPConnection#send(CEMI,
-	 * tuwien.auto.calimero.knxnetip.KNXnetIPConnection.BlockingMode)}.
-	 * <p>
+	 * Blocking mode used in {@link KNXnetIPConnection#send(CEMI, KNXnetIPConnection.BlockingMode)}.
 	 */
-	class BlockingMode
-	{
-		private final String mode;
-
-		BlockingMode(final String mode)
-		{
-			this.mode = mode;
-		}
+	enum BlockingMode {
+		/**
+		 * Send mode without any blocking for a response.
+		 */
+		NonBlocking,
 
 		/**
-		 * Returns a textual representation of this blocking mode.
-		 * <p>
+		 * Send mode with waiting for service acknowledgment response.
 		 */
-		public String toString()
-		{
-			return mode;
-		}
+		WaitForAck,
+
+		/**
+		 * Send mode with waiting for cEMI confirmation response.
+		 */
+		WaitForCon
 	}
 
-	/**
-	 * Send mode without any blocking for a response.
-	 * <p>
-	 */
-	BlockingMode NONBLOCKING = new BlockingMode("non-blocking");
-
-	/**
-	 * Send mode with waiting for service acknowledgment response.
-	 * <p>
-	 */
-	BlockingMode WAIT_FOR_ACK = new BlockingMode("wait for ack");
-
-	/**
-	 * Send mode with waiting for cEMI confirmation response.
-	 */
-	BlockingMode WAIT_FOR_CON = new BlockingMode("wait for cEMI.con");
 
 	/**
 	 * Adds the specified event listener <code>l</code> to receive events from this
@@ -149,7 +124,7 @@ public interface KNXnetIPConnection
 	 * during the notification, and should be moved to dedicated own worker thread.
 	 * Otherwise subsequent listener invocations will suffer from time delays since the
 	 * receiver can not move on.
-	 * 
+	 *
 	 * @param l the listener to add
 	 */
 	void addConnectionListener(KNXListener l);
@@ -159,7 +134,7 @@ public interface KNXnetIPConnection
 	 * events from this connection.
 	 * <p>
 	 * If <code>l</code> was not added in the first place, no action is performed.
-	 * 
+	 *
 	 * @param l the listener to remove
 	 */
 	void removeConnectionListener(KNXListener l);
@@ -177,21 +152,22 @@ public interface KNXnetIPConnection
 	 * guaranteed to get notified before this method returns, with the communication state
 	 * (see {@link #getState()}) reset to {@link #OK} after the notifying is done, so to
 	 * prevent another send call from a listener.
-	 * 
+	 *
 	 * @param frame cEMI message to send
 	 * @param mode specifies the behavior in regard to response messages, this parameter
 	 *        will be ignored by protocols in case no response is expected at all;<br>
 	 *        supply one of the {@link BlockingMode} constants, with following blocking
-	 *        behavior in increasing order<br> {@link #NONBLOCKING}<br> {@link #WAIT_FOR_ACK}<br>
-	 *        {@link #WAIT_FOR_CON}<br>
+	 *        behavior in increasing order: {@link BlockingMode#NonBlocking}, {@link BlockingMode#WaitForAck},
+	 *        {@link BlockingMode#WaitForCon}
 	 * @throws KNXTimeoutException in a blocking <code>mode</code> if a timeout regarding
 	 *         a response message was encountered
 	 * @throws KNXConnectionClosedException if no communication was established in the
 	 *         first place or communication was closed
+	 * @throws InterruptedException on thread interrupt
 	 * @throws KNXIllegalStateException if the send is not permitted by the protocol
 	 */
-	void send(CEMI frame, BlockingMode mode) throws KNXTimeoutException,
-		KNXConnectionClosedException;
+	void send(CEMI frame, BlockingMode mode)
+		throws KNXTimeoutException, KNXConnectionClosedException, InterruptedException;
 
 	/**
 	 * Returns the address (endpoint) this connection endpoint is communicating to.
@@ -201,14 +177,14 @@ public interface KNXnetIPConnection
 	 * used.<br>
 	 * If no communication is established, the unspecified (wildcard) address with port
 	 * number 0 is returned.
-	 * 
+	 *
 	 * @return IP address/host and port as {@link InetSocketAddress}
 	 */
 	InetSocketAddress getRemoteAddress();
 
 	/**
 	 * Returns information about the current KNXnet/IP communication state.
-	 * 
+	 *
 	 * @return state enumeration
 	 */
 	int getState();
@@ -220,7 +196,7 @@ public interface KNXnetIPConnection
 	 * The name has to be unique at least for connections with different IP addresses for
 	 * the remote control endpoint.<br>
 	 * The returned name is used by this connection for the name of its log service.
-	 * 
+	 *
 	 * @return name for this connection as string
 	 */
 	String getName();
@@ -232,5 +208,6 @@ public interface KNXnetIPConnection
 	 * listeners receive. <br>
 	 * If this connection endpoint is already closed, no action is performed.
 	 */
+	@Override
 	void close();
 }

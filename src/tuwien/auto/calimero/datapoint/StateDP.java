@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2015 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -37,18 +37,16 @@
 package tuwien.auto.calimero.datapoint;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
 import tuwien.auto.calimero.GroupAddress;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.xml.Attribute;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 import tuwien.auto.calimero.xml.KNXMLException;
-import tuwien.auto.calimero.xml.XMLReader;
-import tuwien.auto.calimero.xml.XMLWriter;
+import tuwien.auto.calimero.xml.XmlReader;
+import tuwien.auto.calimero.xml.XmlWriter;
 
 /**
  * Represents a state based KNX datapoint.
@@ -75,15 +73,15 @@ public class StateDP extends Datapoint
 	private static final String TAG_INVALIDATING = "invalidatingAddresses";
 
 	// list of group addresses, whose .ind messages invalidate the data point
-	private final List invalidating;
+	private final List<GroupAddress> invalidating;
 	// list of group addresses, whose .ind and .res messages update the data point
-	private final List updating;
+	private final List<GroupAddress> updating;
 	// timeout in seconds, how long a set state value stays valid since reception
 	private volatile int timeout;
+	private final List<String> locations = Collections.synchronizedList(new ArrayList<>());
 
 	/**
 	 * Creates a new state based datapoint with a name.
-	 * <p>
 	 *
 	 * @param main the group address used to identify this datapoint
 	 * @param name user defined datapoint name
@@ -91,13 +89,12 @@ public class StateDP extends Datapoint
 	public StateDP(final GroupAddress main, final String name)
 	{
 		super(main, name, true);
-		invalidating = Collections.synchronizedList(new ArrayList());
-		updating = Collections.synchronizedList(new ArrayList());
+		invalidating = Collections.synchronizedList(new ArrayList<>());
+		updating = Collections.synchronizedList(new ArrayList<>());
 	}
 
 	/**
 	 * Creates a new datapoint with a name and specifies datapoint translation type.
-	 * <p>
 	 *
 	 * @param main the group address used to identify this datapoint
 	 * @param name user defined datapoint name
@@ -115,7 +112,6 @@ public class StateDP extends Datapoint
 
 	/**
 	 * Creates a new state based datapoint and adds invalidating and updating addresses.
-	 * <p>
 	 *
 	 * @param main the group address used to identify this datapoint
 	 * @param name user defined datapoint name
@@ -125,32 +121,30 @@ public class StateDP extends Datapoint
 	 *        messages lead to an update of this datapoint state
 	 */
 	public StateDP(final GroupAddress main, final String name,
-		final Collection invalidatingAddresses, final Collection updatingAddresses)
+		final Collection<GroupAddress> invalidatingAddresses,
+		final Collection<GroupAddress> updatingAddresses)
 	{
 		super(main, name, true);
-		invalidating = Collections.synchronizedList(new ArrayList(invalidatingAddresses));
-		checkGAs(invalidating);
-		updating = Collections.synchronizedList(new ArrayList(updatingAddresses));
-		checkGAs(updating);
+		invalidating = Collections.synchronizedList(new ArrayList<>(invalidatingAddresses));
+		updating = Collections.synchronizedList(new ArrayList<>(updatingAddresses));
 	}
 
 	/**
 	 * Creates a new state based datapoint from XML input.
 	 * <p>
-	 * If the current XML element position is no start tag, the next element tag is read.
-	 * The datapoint element is then expected to be the current element in the reader.
+	 * If the current XML element position is no start tag, the next element tag is read. The
+	 * datapoint element is then expected to be the current element in the reader.
 	 *
 	 * @param r a XML reader
-	 * @throws KNXMLException if the XML element is no datapoint or could not be read
-	 *         correctly
+	 * @throws KNXMLException if the XML element is no datapoint or could not be read correctly
 	 */
-	public StateDP(final XMLReader r) throws KNXMLException
+	public StateDP(final XmlReader r) throws KNXMLException
 	{
 		super(r);
 		if (!isStateBased())
 			throw new KNXMLException("no state based KNX datapoint element", r);
-		invalidating = Collections.synchronizedList(new ArrayList());
-		updating = Collections.synchronizedList(new ArrayList());
+		invalidating = Collections.synchronizedList(new ArrayList<>());
+		updating = Collections.synchronizedList(new ArrayList<>());
 		doLoad(r);
 	}
 
@@ -187,59 +181,58 @@ public class StateDP extends Datapoint
 	}
 
 	/**
-	 * Adds a group address to this datapoint to indicate that KNX messages with that
-	 * address are allowed to alter the associated datapoint state (i.e., a state value
-	 * related to this datapoint).
-	 * <p>
-	 * A group address can be marked as updating a state or invalidating a state. An
-	 * address is added at most once to each category.
+	 * Adds an updating group address to this datapoint to indicate that KNX messages with that destination address are
+	 * allowed to update the associated datapoint state (i.e., the state value related to this datapoint). An address is
+	 * added at most once.
 	 *
-	 * @param a the KNX group address to add
-	 * @param isUpdating <code>true</code> to mark the address as updating this datapoint
-	 *        state, <code>false</code> to mark it as state invalidating
+	 * @param ga the KNX group address to add
 	 */
-	public final void add(final GroupAddress a, final boolean isUpdating)
+	public void addUpdatingAddress(final GroupAddress ga)
 	{
-		if (getMainAddress().equals(a))
-			throw new KNXIllegalArgumentException("address equals datapoint main address");
-		if (isUpdating) {
-			if (!updating.contains(a))
-				updating.add(a);
-		}
-		else {
-			if (!invalidating.contains(a))
-				invalidating.add(a);
-		}
+		if (getMainAddress().equals(ga))
+			throw new KNXIllegalArgumentException(
+					"updating address " + ga + " equals main address of this datapoint '" + getName() + "'");
+		if (!updating.contains(ga))
+			updating.add(ga);
 	}
 
 	/**
-	 * Removes a state updating/invalidating group address from this datapoint.
-	 * <p>
-	 * The group address is no longer contained in the corresponding updating/invalidating
-	 * category.
+	 * Adds an invalidating group address to this datapoint to indicate that KNX messages with that address are allowed
+	 * to invalidate the associated datapoint state (i.e., the state value related to this datapoint). An address is
+	 * added at most once.
 	 *
-	 * @param a the KNX group address to remove
-	 * @param fromUpdating <code>true</code> to remove from updating this datapoint state,
-	 *        <code>false</code> to remove from invalidating this datapoint state
+	 * @param ga the KNX group address to add
 	 */
-	public final void remove(final GroupAddress a, final boolean fromUpdating)
+	public void addInvalidatingAddress(final GroupAddress ga)
 	{
-		if (fromUpdating)
-			updating.remove(a);
-		else
-			invalidating.remove(a);
+		if (getMainAddress().equals(ga))
+			throw new KNXIllegalArgumentException(
+					"updating address " + ga + " equals main address of this datapoint '" + getName() + "'");
+		if (!invalidating.contains(ga))
+			invalidating.add(ga);
+	}
+
+	/**
+	 * Removes an updating/invalidating group address from this datapoint, so the group address is no longer contained
+	 * in the corresponding updating/invalidating category.
+	 *
+	 * @param ga the KNX group address to remove
+	 */
+	public final void removeAddress(final GroupAddress ga)
+	{
+		updating.remove(ga);
+		invalidating.remove(ga);
 	}
 
 	/**
 	 * Returns the collection of KNX group addresses which are allowed to alter the state
 	 * of this datapoint.
-	 * <p>
 	 *
 	 * @param updatingAddresses <code>true</code> if the updating addresses should be
 	 *        returned, <code>false</code> for the invalidating addresses
 	 * @return an unmodifiable collection with entries of type {@link GroupAddress}
 	 */
-	public Collection getAddresses(final boolean updatingAddresses)
+	public Collection<GroupAddress> getAddresses(final boolean updatingAddresses)
 	{
 		return Collections.unmodifiableCollection(updatingAddresses ? updating : invalidating);
 	}
@@ -247,7 +240,6 @@ public class StateDP extends Datapoint
 	/**
 	 * Returns whether KNX indication messages with destination group address
 	 * <code>a</code> will invalidate the associated datapoint state of this datapoint.
-	 * <p>
 	 *
 	 * @param a the address to check
 	 * @return <code>true</code> iff address is invalidating, <code>false</code> otherwise
@@ -260,7 +252,6 @@ public class StateDP extends Datapoint
 	/**
 	 * Returns whether KNX indication or response messages with destination address
 	 * <code>a</code> will update the associated datapoint state of this datapoint.
-	 * <p>
 	 *
 	 * @param a the address to check
 	 * @return <code>true</code> iff address is updating, <code>false</code> otherwise
@@ -270,81 +261,74 @@ public class StateDP extends Datapoint
 		return updating.contains(a);
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.datapoint.Datapoint#toString()
-	 */
+	@Override
 	public String toString()
 	{
-		return "state DP " + super.toString();
+		return "state DP " + locations() + " " + super.toString();
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.datapoint.Datapoint#doLoad(
-	 * tuwien.auto.calimero.xml.XMLReader)
-	 */
-	void doLoad(final XMLReader r) throws KNXMLException
+	@Override
+	void doLoad(final XmlReader r) throws KNXMLException
 	{
 		boolean main = false;
-		while (r.getPosition() == XMLReader.START_TAG) {
-			final String tag = r.getCurrent().getName();
-			if (tag.equals(TAG_EXPIRATION)) {
-				final String a = r.getCurrent().getAttribute(ATTR_TIMEOUT);
-				if (a != null)
-					try {
-						timeout = Integer.decode(a).intValue();
-					}
-					catch (final NumberFormatException e) {
-						throw new KNXMLException("malformed attribute timeout", r);
-					}
+		for (int event = r.getEventType(); r.hasNext(); event = r.next()) {
+			if (event == XmlReader.START_ELEMENT) {
+				final String tag = r.getLocalName();
+				if (tag.equals(TAG_EXPIRATION)) {
+					final String a = r.getAttributeValue("", ATTR_TIMEOUT);
+					r.getElementText();
+					if (a != null)
+						try {
+							timeout = Integer.decode(a).intValue();
+						}
+						catch (final NumberFormatException e) {
+							throw new KNXMLException("malformed attribute timeout", r);
+						}
+				}
+				else if (tag.equals("location"))
+					locations.add(r.getElementText());
+				else if (tag.equals(TAG_UPDATING))
+					while (r.nextTag() == XmlReader.START_ELEMENT)
+						updating.add(new GroupAddress(r));
+				else if (tag.equals(TAG_INVALIDATING))
+					while (r.nextTag() == XmlReader.START_ELEMENT)
+						invalidating.add(new GroupAddress(r));
+				else if (!main) {
+					super.doLoad(r);
+					main = true;
+				}
+				else
+					throw new KNXMLException("invalid element", r);
 			}
-			else if (r.getCurrent().isEmptyElementTag())
-				;
-			else if (tag.equals(TAG_UPDATING))
-				while (r.read() == XMLReader.START_TAG)
-					updating.add(new GroupAddress(r));
-			else if (tag.equals(TAG_INVALIDATING))
-				while (r.read() == XMLReader.START_TAG)
-					invalidating.add(new GroupAddress(r));
-			else if (!main) {
-				super.doLoad(r);
-				main = true;
-			}
-			else
-				throw new KNXMLException("invalid element", r);
-			r.read();
+			else if (event == XmlReader.END_ELEMENT && r.getLocalName().equals(TAG_DATAPOINT))
+				break;
 		}
 		if (!main)
 			throw new KNXMLException("Datapoint is missing its address", r);
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.datapoint.Datapoint#doSave(
-	 * tuwien.auto.calimero.xml.XMLWriter)
-	 */
-	void doSave(final XMLWriter w) throws KNXMLException
+	@Override
+	void doSave(final XmlWriter w) throws KNXMLException
 	{
 		// <expiration timeout=int />
-		w.writeEmptyElement(TAG_EXPIRATION, Arrays.asList(new Attribute[] { new Attribute(
-				ATTR_TIMEOUT, Integer.toString(timeout)) }));
-		w.writeElement(TAG_UPDATING, Collections.EMPTY_LIST, null);
+		w.writeEmptyElement(TAG_EXPIRATION);
+		w.writeAttribute(ATTR_TIMEOUT, Integer.toString(timeout));
+		w.writeStartElement(TAG_UPDATING);
 		synchronized (updating) {
-			for (final Iterator i = updating.iterator(); i.hasNext();)
-				((GroupAddress) i.next()).save(w);
+			for (final Iterator<GroupAddress> i = updating.iterator(); i.hasNext();)
+				i.next().save(w);
 		}
-		w.endElement();
-		w.writeElement(TAG_INVALIDATING, Collections.EMPTY_LIST, null);
+		w.writeEndElement();
+		w.writeStartElement(TAG_INVALIDATING);
 		synchronized (invalidating) {
-			for (final Iterator i = invalidating.iterator(); i.hasNext();)
-				((GroupAddress) i.next()).save(w);
+			for (final Iterator<GroupAddress> i = invalidating.iterator(); i.hasNext();)
+				i.next().save(w);
 		}
-		w.endElement();
+		w.writeEndElement();
 	}
 
-	// iteration not synchronized
-	private void checkGAs(final List l)
+	private Collection<String> locations()
 	{
-		for (final Iterator i = l.iterator(); i.hasNext();)
-			if (!(i.next() instanceof GroupAddress))
-				throw new KNXIllegalArgumentException("not a group address list");
+		return locations;
 	}
 }

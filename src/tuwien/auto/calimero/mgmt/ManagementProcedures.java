@@ -37,12 +37,14 @@
 package tuwien.auto.calimero.mgmt;
 
 import java.util.List;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 import tuwien.auto.calimero.IndividualAddress;
-import tuwien.auto.calimero.exception.KNXException;
-import tuwien.auto.calimero.exception.KNXInvalidResponseException;
-import tuwien.auto.calimero.exception.KNXRemoteException;
-import tuwien.auto.calimero.exception.KNXTimeoutException;
+import tuwien.auto.calimero.KNXException;
+import tuwien.auto.calimero.KNXInvalidResponseException;
+import tuwien.auto.calimero.KNXRemoteException;
+import tuwien.auto.calimero.KNXTimeoutException;
 import tuwien.auto.calimero.link.KNXLinkClosedException;
 
 /**
@@ -57,7 +59,7 @@ import tuwien.auto.calimero.link.KNXLinkClosedException;
  *
  * @author B. Malinowsky
  */
-public interface ManagementProcedures
+public interface ManagementProcedures extends AutoCloseable
 {
 	// addressing procedures
 
@@ -66,7 +68,7 @@ public interface ManagementProcedures
 	 * <p>
 	 * This method corresponds to the KNX <i>NM_IndividualAddress_Read</i> procedure.<br>
 	 * Depending on whether none, one, or several devices are in programming mode, the
-	 * returned array length of addresses is 0, 1, or >1, respectively. If more than one
+	 * returned array length of addresses is 0, 1, or &gt; 1, respectively. If more than one
 	 * device with the same individual address is in programming mode, the returned array
 	 * will contain the same addresses several times.<br>
 	 * The read timeout is 3 seconds.
@@ -158,8 +160,25 @@ public interface ManagementProcedures
 	 *         device address
 	 * @throws InterruptedException on interrupted thread
 	 */
-	boolean writeAddress(byte[] serialNo, IndividualAddress newAddress) throws KNXException,
-			InterruptedException;
+	boolean writeAddress(byte[] serialNo, IndividualAddress newAddress) throws KNXException, InterruptedException;
+
+	/**
+	 * Reads the domain address of a communication partner in the KNX network, providing both the individual address of
+	 * the device as well as its domain address for all devices from which a response is received.
+	 * <p>
+	 * This service is designed for open media and uses system broadcast communication mode.<br>
+	 * The communication partner is one or more devices in programming mode. The total response timeout granted to any
+	 * device responding is 3 seconds.
+	 *
+	 * @param device consumer called for every responding device, with the first argument being the device address, the
+	 *        second argument its domain address
+	 * @throws KNXTimeoutException on any timeout during sending the request
+	 * @throws KNXInvalidResponseException on invalid read response message
+	 * @throws KNXLinkClosedException on closed KNX network link
+	 * @throws KNXException on other errors during read domain address
+	 * @throws InterruptedException on interrupted thread
+	 */
+	void readDomainAddress(BiConsumer<IndividualAddress, byte[]> device) throws KNXException, InterruptedException;
 
 	// scanning procedures
 
@@ -194,11 +213,11 @@ public interface ManagementProcedures
 	 * the domain address have to be configured.
 	 *
 	 * @param area the KNX network area to scan for network devices,
-	 *        <code>0 <= area <= 0x0F</code>, devices in the backbone line of areas are
+	 *        <code>0 &le; area &le; 0x0F</code>, devices in the backbone line of areas are
 	 *        assigned area address 0; for a definition of area, see
 	 *        {@link IndividualAddress}
 	 * @param line the KNX network line to scan for network devices,
-	 *        <code>0 <= line <= 0x0F</code>, devices in the main line of an area are
+	 *        <code>0 &le; line &le; 0x0F</code>, devices in the main line of an area are
 	 *        assigned line address 0; for a definition of line, see
 	 *        {@link IndividualAddress}
 	 * @return an array of {@link IndividualAddress}es of the existing network devices,
@@ -210,6 +229,26 @@ public interface ManagementProcedures
 	 */
 	IndividualAddress[] scanNetworkDevices(int area, int line) throws KNXTimeoutException,
 			KNXLinkClosedException, InterruptedException;
+
+	/**
+	 * Determines the existing KNX network devices on a specific KNX subnetwork. This method corresponds to the KNX
+	 * network management subnetwork devices scan procedure <i>NM_SubnetworkDevices_Scan</i>. This procedure scans a
+	 * specific KNX subnetwork, identified by the <code>area</code> and <code>line</code> of the KNX network.<br>
+	 * For this procedure to work, the individual address (and the domain address for open media) of the used routers in
+	 * the KNX network have to be configured.
+	 *
+	 * @param area the KNX network area to scan for network devices, <code>0 &le; area &le; 0x0F</code>; devices in the
+	 *        backbone line of areas are assigned area address 0. For a definition of area, see
+	 *        {@link IndividualAddress}.
+	 * @param line the KNX network line to scan for network devices, <code>0 &le; line &le; 0x0F</code>; devices in the
+	 *        main line of an area are assigned line address 0. for a definition of line, see {@link IndividualAddress}
+	 * @param device consumer called for every device found during the scan
+	 * @throws KNXTimeoutException on communication timeouts during the scan
+	 * @throws KNXLinkClosedException on a closed KNXNetworkLink to the KNX network
+	 * @throws InterruptedException if this thread was interrupted while scanning the network devices
+	 */
+	void scanNetworkDevices(int area, int line, Consumer<IndividualAddress> device)
+		throws KNXTimeoutException, KNXLinkClosedException, InterruptedException;
 
 	/**
 	 * Determines the serial numbers of all KNX devices that have its individual address set to the
@@ -238,7 +277,7 @@ public interface ManagementProcedures
 	 * @throws InterruptedException on interrupted thread
 	 */
 	// ??? can we automatically detect the medium in this procedure?
-	List scanSerialNumbers(int medium) throws KNXException, InterruptedException;
+	List<byte[]> scanSerialNumbers(int medium) throws KNXException, InterruptedException;
 
 	// mode querying/setting procedures
 
@@ -272,7 +311,7 @@ public interface ManagementProcedures
 	 *
 	 * @param device the destination device address
 	 * @param startAddress the memory destination start address,
-	 *        <code>0 <= startAddress <= 0xFFFFFFFF</code>
+	 *        <code>0 &le; startAddress &le; 0xFFFFFFFF</code>
 	 * @param data the data to be written, with <code>data.length</code> equal to the number of
 	 *        bytes to write
 	 * @param verifyWrite <code>true</code> to read back and compare any written memory for
@@ -298,8 +337,8 @@ public interface ManagementProcedures
 	 *
 	 * @param device the destination device address
 	 * @param startAddress the memory source start address,
-	 *        <code>0 <= startAddress <= 0xFFFFFFFF</code>
-	 * @param bytes number of bytes to read, <code>0 < bytes</code>
+	 *        <code>0 &le; startAddress &le; 0xFFFFFFFF</code>
+	 * @param bytes number of bytes to read, <code>0 &lt; bytes</code>
 	 * @return an array of bytes, with the length of the array equal to <code>bytes</code>
 	 * @throws KNXException on communication error or device access problems
 	 * @throws InterruptedException on interrupted thread
@@ -320,4 +359,7 @@ public interface ManagementProcedures
 	 * @see ManagementClient#detach()
 	 */
 	void detach();
+
+	@Override
+	default void close() { detach(); }
 }

@@ -39,7 +39,7 @@ package tuwien.auto.calimero.link.medium;
 import java.io.ByteArrayInputStream;
 
 import tuwien.auto.calimero.DataUnitBuilder;
-import tuwien.auto.calimero.exception.KNXFormatException;
+import tuwien.auto.calimero.KNXFormatException;
 
 /**
  * L-data frame format on PL110 communication medium. Supports standard and extended frame format.
@@ -89,12 +89,10 @@ public class PL110LData extends RawFrameBase
 	 */
 	public final byte[] getDomainAddress()
 	{
-		return (byte[]) doa.clone();
+		return doa.clone();
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.link.medium.RawFrameBase#toString()
-	 */
+	@Override
 	public String toString()
 	{
 		return super.toString()

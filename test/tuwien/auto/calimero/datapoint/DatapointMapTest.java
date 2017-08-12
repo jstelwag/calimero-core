@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2014 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -36,26 +36,36 @@
 
 package tuwien.auto.calimero.datapoint;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-import junit.framework.TestCase;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
+
 import tuwien.auto.calimero.GroupAddress;
 import tuwien.auto.calimero.Util;
 import tuwien.auto.calimero.xml.KNXMLException;
-import tuwien.auto.calimero.xml.XMLFactory;
-import tuwien.auto.calimero.xml.XMLReader;
-import tuwien.auto.calimero.xml.XMLWriter;
+import tuwien.auto.calimero.xml.XmlInputFactory;
+import tuwien.auto.calimero.xml.XmlOutputFactory;
+import tuwien.auto.calimero.xml.XmlReader;
+import tuwien.auto.calimero.xml.XmlWriter;
 
 /**
  * @author B. Malinowsky
  */
-public class DatapointMapTest extends TestCase
+public class DatapointMapTest
 {
 	private static final String dpFile = Util.getTargetPath() + "datapointMap.xml";
 
-	private DatapointModel m;
+	private DatapointModel<Datapoint> m;
 	private final GroupAddress ga1 = new GroupAddress(1, 1, 1);
 	private final GroupAddress ga2 = new GroupAddress(2, 2, 2);
 	private final GroupAddress ga3 = new GroupAddress(3, 3, 3);
@@ -63,43 +73,24 @@ public class DatapointMapTest extends TestCase
 	private final Datapoint dp2 = new CommandDP(ga2, "test2");
 	private final Datapoint dp3 = new StateDP(ga3, "test3");
 
-	/**
-	 * @param name name of test case
-	 */
-	public DatapointMapTest(final String name)
+	@BeforeEach
+	protected void init() throws Exception
 	{
-		super(name);
-	}
-
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#setUp()
-	 */
-	protected void setUp() throws Exception
-	{
-		super.setUp();
-		m = new DatapointMap();
-
-	}
-
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#tearDown()
-	 */
-	protected void tearDown() throws Exception
-	{
-		super.tearDown();
+		m = new DatapointMap<>();
 	}
 
 	/**
 	 * Test method for {@link tuwien.auto.calimero.datapoint.DatapointMap#DatapointMap(
 	 * java.util.Collection)}.
 	 */
+	@Test
 	public final void testDatapointMapCollection()
 	{
-		final List l = new ArrayList();
+		final List<Datapoint> l = new ArrayList<>();
 		l.add(dp1);
 		l.add(dp2);
 		l.add(dp3);
-		final DatapointModel dpm = new DatapointMap(l);
+		final DatapointModel<Datapoint> dpm = new DatapointMap<>(l);
 		assertTrue(dpm.contains(ga1));
 		assertTrue(dpm.contains(ga2));
 		assertTrue(dpm.contains(ga3));
@@ -109,6 +100,7 @@ public class DatapointMapTest extends TestCase
 	 * Test method for {@link tuwien.auto.calimero.datapoint.DatapointMap#add(
 	 * tuwien.auto.calimero.datapoint.Datapoint)}.
 	 */
+	@Test
 	public final void testAdd()
 	{
 		assertFalse(m.contains(ga1));
@@ -123,6 +115,7 @@ public class DatapointMapTest extends TestCase
 	 * Test method for {@link tuwien.auto.calimero.datapoint.DatapointMap#remove(
 	 * tuwien.auto.calimero.datapoint.Datapoint)}.
 	 */
+	@Test
 	public final void testRemove()
 	{
 		m.add(dp1);
@@ -137,6 +130,7 @@ public class DatapointMapTest extends TestCase
 	 * Test method for {@link tuwien.auto.calimero.datapoint.DatapointMap#get(
 	 * tuwien.auto.calimero.GroupAddress)}.
 	 */
+	@Test
 	public final void testGet()
 	{
 		assertNull(m.get(ga3));
@@ -150,13 +144,14 @@ public class DatapointMapTest extends TestCase
 	/**
 	 * Test method for {@link tuwien.auto.calimero.datapoint.DatapointMap#removeAll()}.
 	 */
+	@Test
 	public final void testRemoveAll()
 	{
-		final List l = new ArrayList();
+		final List<Datapoint> l = new ArrayList<>();
 		l.add(dp1);
 		l.add(dp2);
 		l.add(dp3);
-		final DatapointModel dpm = new DatapointMap(l);
+		final DatapointModel<Datapoint> dpm = new DatapointMap<>(l);
 		dpm.removeAll();
 		assertFalse(dpm.contains(ga1));
 		assertFalse(dpm.contains(ga2));
@@ -166,12 +161,13 @@ public class DatapointMapTest extends TestCase
 	/**
 	 * Test method for {@link tuwien.auto.calimero.datapoint.DatapointMap#getDatapoints()}.
 	 */
+	@Test
 	public final void testGetDatapoints()
 	{
-		Collection c = ((DatapointMap) m).getDatapoints();
+		Collection<Datapoint> c = ((DatapointMap<Datapoint>) m).getDatapoints();
 		assertEquals(0, c.size());
 		m.add(dp2);
-		c = ((DatapointMap) m).getDatapoints();
+		c = ((DatapointMap<Datapoint>) m).getDatapoints();
 		assertEquals(1, c.size());
 		assertTrue(c.contains(dp2));
 
@@ -187,19 +183,21 @@ public class DatapointMapTest extends TestCase
 
 	/**
 	 * Test method for {@link tuwien.auto.calimero.datapoint.DatapointMap#load(
-	 * tuwien.auto.calimero.xml.XMLReader)}.
+	 * tuwien.auto.calimero.xml.XmlReader)}.
 	 *
 	 * @throws KNXMLException
 	 */
+	@Test
+	@Disabled
 	public final void testLoad() throws KNXMLException
 	{
-		final XMLWriter w = XMLFactory.getInstance().createXMLWriter(dpFile);
+		final XmlWriter w = XmlOutputFactory.newInstance().createXMLWriter(dpFile);
 		m.add(dp1);
 		m.add(dp2);
 		m.add(dp3);
 		m.save(w);
 		w.close();
-		final XMLReader r = XMLFactory.getInstance().createXMLReader(dpFile);
+		final XmlReader r = XmlInputFactory.newInstance().createXMLReader(dpFile);
 		try {
 			m.load(r);
 			fail("datapoints already in map");
@@ -208,46 +206,62 @@ public class DatapointMapTest extends TestCase
 		r.close();
 
 		m.removeAll();
-		assertEquals(0, ((DatapointMap) m).getDatapoints().size());
-		final XMLReader r2 = XMLFactory.getInstance().createXMLReader(dpFile);
+		assertEquals(0, ((DatapointMap<Datapoint>) m).getDatapoints().size());
+		final XmlReader r2 = XmlInputFactory.newInstance().createXMLReader(dpFile);
 		m.load(r2);
 		r2.close();
-		assertEquals(3, ((DatapointMap) m).getDatapoints().size());
+		assertEquals(3, ((DatapointMap<Datapoint>) m).getDatapoints().size());
 		assertTrue(m.contains(dp1));
 		assertTrue(m.contains(dp2));
 		assertTrue(m.contains(dp3));
 
 		// save empty file
-		final XMLWriter w2 = XMLFactory.getInstance().createXMLWriter(dpFile);
-		new DatapointMap().save(w2);
+		final XmlWriter w2 = XmlOutputFactory.newInstance().createXMLWriter(dpFile);
+		new DatapointMap<StateDP>().save(w2);
 		w2.close();
 		// load empty file
-		final XMLReader r3 = XMLFactory.getInstance().createXMLReader(dpFile);
-		final DatapointMap dpm = new DatapointMap();
+		final XmlReader r3 = XmlInputFactory.newInstance().createXMLReader(dpFile);
+		final DatapointMap<StateDP> dpm = new DatapointMap<>();
 		dpm.load(r3);
 		r3.close();
 		assertEquals(0, dpm.getDatapoints().size());
 
 		// load empty file into nonempty map
-		final XMLReader r4 = XMLFactory.getInstance().createXMLReader(dpFile);
+		final XmlReader r4 = XmlInputFactory.newInstance().createXMLReader(dpFile);
 		m.load(r4);
 		r4.close();
-		assertEquals(3, ((DatapointMap) m).getDatapoints().size());
+		assertEquals(3, ((DatapointMap<Datapoint>) m).getDatapoints().size());
 
+		// ensure state-based DPs only
+		final XmlWriter w5 = XmlOutputFactory.newInstance().createXMLWriter(dpFile);
+		m.removeAll();
+		m.add(dp1);
+		m.add(dp2); // command-based!
+		m.add(dp3);
+		m.save(w5);
+		w5.close();
+		final XmlReader r5 = XmlInputFactory.newInstance().createXMLReader(dpFile);
+		try {
+			new DatapointMap<StateDP>().load(r5);
+			fail("loaded command DP into state-based DP map");
+		}
+		catch (final KNXMLException expected) {}
+		r5.close();
 	}
 
 	/**
 	 * Test method for {@link tuwien.auto.calimero.datapoint.DatapointMap#save(
-	 * tuwien.auto.calimero.xml.XMLWriter)}.
+	 * tuwien.auto.calimero.xml.XmlWriter)}.
 	 *
 	 * @throws KNXMLException
 	 */
+	@Test
 	public final void testSave() throws KNXMLException
 	{
-		final XMLWriter w = XMLFactory.getInstance().createXMLWriter(dpFile);
+		final XmlWriter w = XmlOutputFactory.newInstance().createXMLWriter(dpFile);
 		m.save(w);
 		w.close();
-		final XMLWriter w2 = XMLFactory.getInstance().createXMLWriter(dpFile);
+		final XmlWriter w2 = XmlOutputFactory.newInstance().createXMLWriter(dpFile);
 		m.add(dp1);
 		m.add(dp2);
 		m.add(dp3);

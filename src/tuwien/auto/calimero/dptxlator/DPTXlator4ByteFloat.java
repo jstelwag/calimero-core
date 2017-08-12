@@ -43,7 +43,7 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
-import tuwien.auto.calimero.exception.KNXFormatException;
+import tuwien.auto.calimero.KNXFormatException;
 
 /**
  * Translator for KNX DPTs with main number 14, type <b>4-byte float</b>.
@@ -609,7 +609,7 @@ public class DPTXlator4ByteFloat extends DPTXlator
 	public static final DPT DPT_WORK = new DPT("14.079", "Work", "-3.40282347e+38f",
 			"3.40282347e+38f", "J");
 
-	private static final Map types = new HashMap(100);
+	private static final Map<String, DPT> types = new HashMap<>(100);
 
 	static {
 		final Field[] fields = DPTXlator4ByteFloat.class.getFields();
@@ -687,6 +687,7 @@ public class DPTXlator4ByteFloat extends DPTXlator
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getNumericValue()
 	 * @see #getValueFloat()
 	 */
+	@Override
 	public final double getNumericValue()
 	{
 		return getValueFloat();
@@ -695,6 +696,7 @@ public class DPTXlator4ByteFloat extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getAllValues()
 	 */
+	@Override
 	public String[] getAllValues()
 	{
 		final String[] buf = new String[data.length / 4];
@@ -706,7 +708,8 @@ public class DPTXlator4ByteFloat extends DPTXlator
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getSubTypes()
 	 */
-	public Map getSubTypes()
+	@Override
+	public Map<String, DPT> getSubTypes()
 	{
 		return types;
 	}
@@ -715,7 +718,7 @@ public class DPTXlator4ByteFloat extends DPTXlator
 	 * @return the subtypes of the 2-byte float translator type
 	 * @see DPTXlator#getSubTypesStatic()
 	 */
-	protected static Map getSubTypesStatic()
+	protected static Map<String, DPT> getSubTypesStatic()
 	{
 		return types;
 	}
@@ -758,6 +761,7 @@ public class DPTXlator4ByteFloat extends DPTXlator
 		dst[i + 3] = ubyte(raw);
 	}
 
+	@Override
 	protected void toDPT(final String value, final short[] dst, final int index)
 		throws KNXFormatException
 	{

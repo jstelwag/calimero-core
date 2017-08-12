@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2011 B. Malinowsky
+    Copyright (c) 2006, 2015 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -36,37 +36,26 @@
 
 package tuwien.auto.calimero.link;
 
-import java.util.EventListener;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.function.Consumer;
+
+import org.slf4j.Logger;
 
 import tuwien.auto.calimero.CloseEvent;
 import tuwien.auto.calimero.FrameEvent;
 import tuwien.auto.calimero.KNXListener;
 import tuwien.auto.calimero.internal.EventListeners;
-import tuwien.auto.calimero.log.LogService;
 
 /**
  * Threaded event notifier for network link and monitor.
  * <p>
- * 
+ *
  * @author B. Malinowsky
  */
-abstract class EventNotifier extends Thread implements KNXListener
+public abstract class EventNotifier<T extends LinkListener> extends Thread implements KNXListener
 {
-	static interface EventCallback
-	{
-		/**
-		 * Invokes the appropriate listener method with the event contained in this event
-		 * callback.
-		 * <p>
-		 * 
-		 * @param l the listener to notify
-		 */
-		void invoke(LinkListener l);
-	}
-
-	static final class Indication implements EventCallback
+	static final class Indication implements Consumer<LinkListener>
 	{
 		private final FrameEvent event;
 
@@ -75,106 +64,85 @@ abstract class EventNotifier extends Thread implements KNXListener
 			event = e;
 		}
 
-		public void invoke(final LinkListener l)
+		@Override
+		public void accept(final LinkListener l)
 		{
 			l.indication(event);
 		}
 	}
 
-	static final class Confirmation implements EventCallback
-	{
-		private final FrameEvent event;
-
-		Confirmation(final FrameEvent e)
-		{
-			event = e;
-		}
-
-		public void invoke(final LinkListener l)
-		{
-			((NetworkLinkListener) l).confirmation(event);
-		}
-	}
-
-	static final class Closed implements EventCallback
-	{
-		private final CloseEvent event;
-
-		Closed(final CloseEvent e)
-		{
-			event = e;
-		}
-
-		public void invoke(final LinkListener l)
-		{
-			l.linkClosed(event);
-		}
-	}
-
-	final LogService logger;
+	final Logger logger;
 	final Object source;
 
-	private final EventListeners listeners;
+	private final EventListeners<T> listeners;
 
-	private final List events = new LinkedList();
+	private final List<Consumer<? super T>> events = new LinkedList<>();
 	private volatile boolean stop;
 
-	EventNotifier(final Object source, final LogService logger)
+	EventNotifier(final Object source, final Logger logger)
 	{
 		super("Calimero link notifier");
 		this.logger = logger;
 		this.source = source;
-		listeners = new EventListeners(logger);
+		listeners = new EventListeners<>(logger);
 		setDaemon(true);
 	}
 
+	@Override
 	public final void run()
 	{
 		try {
 			while (true) {
-				EventCallback ec;
+				final Consumer<? super T> c;
 				synchronized (events) {
 					while (events.isEmpty())
 						events.wait();
-					ec = (EventCallback) events.remove(0);
+					c = events.remove(0);
 				}
-				fire(ec);
+				fire(c);
 			}
 		}
 		catch (final InterruptedException e) {}
 		// empty event queue
 		synchronized (events) {
 			while (!events.isEmpty())
-				fire((EventCallback) events.remove(0));
+				fire(events.remove(0));
 		}
 	}
 
+	@Override
 	public abstract void frameReceived(FrameEvent e);
 
+	@Override
 	public void connectionClosed(final CloseEvent e)
 	{
-		addEvent(new Closed(new CloseEvent(source, e.getInitiator(), e.getReason())));
+		addEvent(l -> l.linkClosed(new CloseEvent(source, e.getInitiator(), e.getReason())));
 		quit();
 	}
 
-	final void addEvent(final EventCallback ec)
+	public EventListeners<T> getListeners()
+	{
+		return listeners;
+	}
+
+	final void addEvent(final Consumer<? super T> c)
 	{
 		if (!stop) {
 			synchronized (events) {
-				events.add(ec);
+				events.add(c);
 				events.notify();
 			}
 		}
 	}
 
-	final void addListener(final LinkListener l)
+	final void addListener(final T l)
 	{
 		if (stop)
 			return;
 		listeners.add(l);
 	}
 
-	final void removeListener(final LinkListener l)
+	final void removeListener(final T l)
 	{
 		listeners.remove(l);
 	}
@@ -192,18 +160,8 @@ abstract class EventNotifier extends Thread implements KNXListener
 		}
 	}
 
-	private void fire(final EventCallback ec)
+	private void fire(final Consumer<? super T> c)
 	{
-		final EventListener[] el = listeners.listeners();
-		for (int i = 0; i < el.length; i++) {
-			final LinkListener l = (LinkListener) el[i];
-			try {
-				ec.invoke(l);
-			}
-			catch (final RuntimeException rte) {
-				removeListener(l);
-				logger.error("removed event listener", rte);
-			}
-		}
+		 listeners.fire(c);
 	}
 }

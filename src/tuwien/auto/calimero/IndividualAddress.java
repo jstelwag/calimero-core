@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2015 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -36,10 +36,8 @@
 
 package tuwien.auto.calimero;
 
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
 import tuwien.auto.calimero.xml.KNXMLException;
-import tuwien.auto.calimero.xml.XMLReader;
+import tuwien.auto.calimero.xml.XmlReader;
 
 /**
  * Represents an immutable KNX individual address.
@@ -124,7 +122,7 @@ public class IndividualAddress extends KNXAddress
 	 * @throws KNXMLException if the XML element is no KNXAddress or the address couldn't
 	 *         be read in correctly
 	 */
-	public IndividualAddress(final XMLReader r) throws KNXMLException
+	public IndividualAddress(final XmlReader r) throws KNXMLException
 	{
 		super(r);
 	}
@@ -169,7 +167,8 @@ public class IndividualAddress extends KNXAddress
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.KNXAddress#getType()
 	 */
-	public String getType()
+	@Override
+	public final String getType()
 	{
 		return ATTR_IND;
 	}
@@ -180,6 +179,7 @@ public class IndividualAddress extends KNXAddress
 	 *
 	 * @return the address string
 	 */
+	@Override
 	public String toString()
 	{
 		return getArea() + "." + getLine() + "." + getDevice();
@@ -193,6 +193,7 @@ public class IndividualAddress extends KNXAddress
 	 * @return <code>true</code> iff <code>obj</code> is of this type and contains the
 	 *         same address, <code>false</code> otherwise
 	 */
+	@Override
 	public boolean equals(final Object obj)
 	{
 		if (obj instanceof IndividualAddress)
@@ -203,6 +204,7 @@ public class IndividualAddress extends KNXAddress
 	/* (non-Javadoc)
 	 * @see java.lang.Object#hashCode()
 	 */
+	@Override
 	public int hashCode()
 	{
 		// offset to distinguish between group address
@@ -210,12 +212,13 @@ public class IndividualAddress extends KNXAddress
 		return offset ^ address;
 	}
 
+	@Override
 	void init(final String address) throws KNXFormatException
 	{
 		final String[] tokens = parse(address);
 		try {
 			if (tokens.length == 1) {
-				init(Integer.decode(tokens[0]).intValue());
+				init(Integer.decode(tokens[0]));
 				return;
 			}
 			if (tokens.length != 3)
@@ -223,11 +226,8 @@ public class IndividualAddress extends KNXAddress
 						+ tokens.length + " levels", address);
 			init(Byte.parseByte(tokens[0]), Byte.parseByte(tokens[1]), Short.parseShort(tokens[2]));
 		}
-		catch (final NumberFormatException e) {
-			throw new KNXFormatException("invalid individual address", address);
-		}
-		catch (final KNXIllegalArgumentException e) {
-			throw new KNXFormatException(e.getMessage());
+		catch (final NumberFormatException | KNXIllegalArgumentException e) {
+			throw new KNXFormatException("invalid individual address", address, e);
 		}
 	}
 

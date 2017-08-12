@@ -58,7 +58,6 @@ public class PerfTestCase extends TestCase
 
 	/**
 	 * Creates a new test case for measuring performance.
-	 * <p>
 	 */
 	public PerfTestCase()
 	{
@@ -79,6 +78,7 @@ public class PerfTestCase extends TestCase
 	/* (non-Javadoc)
 	 * @see junit.framework.TestCase#runBare()
 	 */
+	@Override
 	public void runBare() throws Throwable
 	{
 		setUp();
@@ -153,7 +153,6 @@ public class PerfTestCase extends TestCase
 
 	/**
 	 * Prints out the test results using the test case default output stream.
-	 * <p>
 	 */
 	public void printResults()
 	{

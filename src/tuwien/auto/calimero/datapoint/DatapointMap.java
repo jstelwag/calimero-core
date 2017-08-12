@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2016 B. Malinowsky
+    Copyright (c) 2006, 2015 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -43,12 +43,11 @@ import java.util.Iterator;
 import java.util.Map;
 
 import tuwien.auto.calimero.GroupAddress;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 import tuwien.auto.calimero.internal.EventListeners;
-import tuwien.auto.calimero.xml.Element;
 import tuwien.auto.calimero.xml.KNXMLException;
-import tuwien.auto.calimero.xml.XMLReader;
-import tuwien.auto.calimero.xml.XMLWriter;
+import tuwien.auto.calimero.xml.XmlReader;
+import tuwien.auto.calimero.xml.XmlWriter;
 
 /**
  * A datapoint model storing datapoints with no defined order or hierarchy using a map
@@ -57,20 +56,23 @@ import tuwien.auto.calimero.xml.XMLWriter;
  *
  * @author B. Malinowsky
  */
-public class DatapointMap implements DatapointModel, ChangeNotifier
+public class DatapointMap<T extends Datapoint> implements DatapointModel<T>, ChangeNotifier
 {
 	private static final String TAG_DATAPOINTS = "datapoints";
 
-	private final Map points;
-	private final EventListeners listeners = new EventListeners();
+	private final Map<GroupAddress, T> points;
+	private final EventListeners<ChangeListener> listeners = new EventListeners<>();
+
+	// NYI ensure we only load valid types based on parameterization, assign from constructor
+	// parameter or factory method
+	private final Class<Datapoint> dpTypeRef = Datapoint.class;
 
 	/**
 	 * Creates a new empty datapoint map.
-	 * <p>
 	 */
 	public DatapointMap()
 	{
-		points = Collections.synchronizedMap(new HashMap(20));
+		points = Collections.synchronizedMap(new HashMap<>(20));
 	}
 
 	/**
@@ -83,25 +85,21 @@ public class DatapointMap implements DatapointModel, ChangeNotifier
 	 * @param datapoints collection with entries of type {@link Datapoint}
 	 * @throws KNXIllegalArgumentException on duplicate datapoint
 	 */
-	public DatapointMap(final Collection datapoints)
+	public DatapointMap(final Collection<T> datapoints)
 	{
 		// not all HashSets put additional capacity in HashSet(Collection) ctor
-		final Map m = new HashMap(Math.max(2 * datapoints.size(), 11));
-		for (final Iterator i = datapoints.iterator(); i.hasNext();) {
-			final Datapoint dp = (Datapoint) i.next();
+		final Map<GroupAddress, T> m = new HashMap<>(Math.max(2 * datapoints.size(), 11));
+		for (final Iterator<T> i = datapoints.iterator(); i.hasNext();) {
+			final T dp = i.next();
 			if (m.containsKey(dp.getMainAddress()))
-				throw new KNXIllegalArgumentException("duplicate datapoint "
-					+ dp.getMainAddress());
+				throw new KNXIllegalArgumentException("duplicate datapoint " + dp.getMainAddress());
 			m.put(dp.getMainAddress(), dp);
 		}
 		points = Collections.synchronizedMap(m);
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.datapoint.DatapointModel#add
-	 * (tuwien.auto.calimero.datapoint.Datapoint)
-	 */
-	public void add(final Datapoint dp)
+	@Override
+	public void add(final T dp)
 	{
 		synchronized (points) {
 			if (points.containsKey(dp.getMainAddress()))
@@ -112,124 +110,99 @@ public class DatapointMap implements DatapointModel, ChangeNotifier
 		}
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.datapoint.DatapointModel#remove
-	 * (tuwien.auto.calimero.datapoint.Datapoint)
-	 */
-	public void remove(final Datapoint dp)
+	@Override
+	public void remove(final T dp)
 	{
 		if (points.remove(dp.getMainAddress()) != null)
 			fireChangeNotification(dp, false);
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.datapoint.DatapointModel#removeAll()
-	 */
+	@Override
 	public void removeAll()
 	{
 		points.clear();
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.datapoint.DatapointModel#get
-	 * (tuwien.auto.calimero.GroupAddress)
-	 */
-	public Datapoint get(final GroupAddress main)
+	@Override
+	public T get(final GroupAddress main)
 	{
-		return (Datapoint) points.get(main);
+		return points.get(main);
 	}
 
+	// ??? make this a super type interface method
 	/**
 	 * Returns all datapoints currently contained in this map.
 	 * <p>
 	 *
 	 * @return unmodifiable collection with entries of type {@link Datapoint}
 	 */
-	public Collection getDatapoints()
+	public Collection<T> getDatapoints()
 	{
 		return Collections.unmodifiableCollection(points.values());
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.datapoint.DatapointModel#contains
-	 * (tuwien.auto.calimero.GroupAddress)
-	 */
+	@Override
 	public boolean contains(final GroupAddress main)
 	{
 		return points.containsKey(main);
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.datapoint.DatapointModel#contains
-	 * (tuwien.auto.calimero.datapoint.Datapoint)
-	 */
-	public boolean contains(final Datapoint dp)
+	@Override
+	public boolean contains(final T dp)
 	{
 		return points.containsKey(dp.getMainAddress());
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.datapoint.DatapointModel#load
-	 * (tuwien.auto.calimero.xml.XMLReader)
-	 */
-	public void load(final XMLReader r) throws KNXMLException
+	@Override
+	public void load(final XmlReader r) throws KNXMLException
 	{
-		if (r.getPosition() != XMLReader.START_TAG)
-			r.read();
-		final Element e = r.getCurrent();
-		if (r.getPosition() != XMLReader.START_TAG || !e.getName().equals(TAG_DATAPOINTS))
+		if (r.getEventType() != XmlReader.START_ELEMENT)
+			r.nextTag();
+		if (r.getEventType() != XmlReader.START_ELEMENT || !r.getLocalName().equals(TAG_DATAPOINTS))
 			throw new KNXMLException(TAG_DATAPOINTS + " element not found", r);
 		synchronized (points) {
-			while (r.read() == XMLReader.START_TAG) {
+			while (r.nextTag() == XmlReader.START_ELEMENT) {
 				final Datapoint dp = Datapoint.create(r);
 				if (points.containsKey(dp.getMainAddress()))
 					throw new KNXMLException("KNX address " + dp.getMainAddress().toString()
 							+ " in datapoint \"" + dp.getName() + "\" already used", r);
-				points.put(dp.getMainAddress(), dp);
+				if (!dpTypeRef.isAssignableFrom(dp.getClass()))
+					throw new KNXMLException("datapoint not of type " + dpTypeRef.getTypeName(), r);
+				@SuppressWarnings("unchecked")
+				final T castDp = (T) dp;
+				points.put(dp.getMainAddress(), castDp);
 			}
 		}
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.datapoint.DatapointModel#save
-	 * (tuwien.auto.calimero.xml.XMLWriter)
-	 */
-	public void save(final XMLWriter w) throws KNXMLException
+	@Override
+	public void save(final XmlWriter w) throws KNXMLException
 	{
-		w.writeElement(TAG_DATAPOINTS, Collections.EMPTY_LIST, null);
+		w.writeStartElement(TAG_DATAPOINTS);
 		synchronized (points) {
-			for (final Iterator i = points.values().iterator(); i.hasNext();)
-				((Datapoint) i.next()).save(w);
+			for (final Iterator<T> i = points.values().iterator(); i.hasNext();)
+				i.next().save(w);
 		}
-		w.endElement();
+		w.writeEndElement();
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.datapoint.ChangeNotifier#
-	 * addChangeListener(tuwien.auto.calimero.datapoint.ChangeListener)
-	 */
+	@Override
 	public void addChangeListener(final ChangeListener l)
 	{
 		listeners.add(l);
 	}
 
-	/* (non-Javadoc)
-	 * @see tuwien.auto.calimero.datapoint.ChangeNotifier#
-	 * removeChangeListener(tuwien.auto.calimero.datapoint.ChangeListener)
-	 */
+	@Override
 	public void removeChangeListener(final ChangeListener l)
 	{
 		listeners.remove(l);
 	}
 
-	private void fireChangeNotification(final Datapoint dp, final boolean added)
+	private void fireChangeNotification(final T dp, final boolean added)
 	{
-		for (final Iterator i = listeners.iterator(); i.hasNext();) {
-			final ChangeListener l = (ChangeListener) i.next();
-			if (added)
-				l.onDatapointAdded(this, dp);
-			else
-				l.onDatapointRemoved(this, dp);
-		}
+		if (added)
+			listeners.fire(l -> l.onDatapointAdded(this, dp));
+		else
+			listeners.fire(l -> l.onDatapointRemoved(this, dp));
 	}
 }

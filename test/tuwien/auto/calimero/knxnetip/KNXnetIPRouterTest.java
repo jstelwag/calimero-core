@@ -36,35 +36,47 @@
 
 package tuwien.auto.calimero.knxnetip;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.net.UnknownHostException;
+import java.time.Duration;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Vector;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import junit.framework.TestCase;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import tag.KnxnetIP;
 import tuwien.auto.calimero.CloseEvent;
 import tuwien.auto.calimero.FrameEvent;
 import tuwien.auto.calimero.GroupAddress;
 import tuwien.auto.calimero.IndividualAddress;
+import tuwien.auto.calimero.KNXException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 import tuwien.auto.calimero.Priority;
 import tuwien.auto.calimero.Util;
 import tuwien.auto.calimero.cemi.CEMI;
 import tuwien.auto.calimero.cemi.CEMILData;
-import tuwien.auto.calimero.exception.KNXException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.log.LogManager;
+import tuwien.auto.calimero.knxnetip.servicetype.RoutingBusy;
 
 /**
  * @author B. Malinowsky
  */
-public class KNXnetIPRouterTest extends TestCase
+@KnxnetIP
+public class KNXnetIPRouterTest
 {
-	private static KNXnetIPConnection.BlockingMode noblock =
-		KNXnetIPConnection.NONBLOCKING;
+	private static KNXnetIPConnection.BlockingMode noblock = KNXnetIPConnection.BlockingMode.NonBlocking;
 
 	private KNXnetIPRouting r;
 	private RouterListenerImpl l;
@@ -74,12 +86,15 @@ public class KNXnetIPRouterTest extends TestCase
 	// should be a frame with unused destination address
 	private CEMILData frameNoDest;
 
+	private final AtomicInteger routingBusy = new AtomicInteger();
+
 	private final class RouterListenerImpl implements RoutingListener
 	{
 		volatile boolean closed;
 		volatile CEMI received;
-		List lost = new Vector();
+		List<LostMessageEvent> lost = new Vector<>();
 
+		@Override
 		public void frameReceived(final FrameEvent e)
 		{
 			assertNotNull(e);
@@ -88,6 +103,7 @@ public class KNXnetIPRouterTest extends TestCase
 			Debug.printLData((CEMILData) received);
 		}
 
+		@Override
 		public void connectionClosed(final CloseEvent e)
 		{
 			assertNotNull(e);
@@ -97,63 +113,47 @@ public class KNXnetIPRouterTest extends TestCase
 			closed = true;
 		}
 
+		@Override
 		public void lostMessage(final LostMessageEvent e)
 		{
 			assertNotNull(e);
 			lost.add(e);
 		}
+
+		@Override
+		public void routingBusy(final RoutingBusyEvent e)
+		{
+			routingBusy.incrementAndGet();
+		}
 	}
 
-	/**
-	 * @param name name of test case
-	 */
-	public KNXnetIPRouterTest(final String name)
+	@BeforeEach
+	void init() throws Exception
 	{
-		super(name);
-	}
-
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#setUp()
-	 */
-	protected void setUp() throws Exception
-	{
-		super.setUp();
 		l = new RouterListenerImpl();
-
-		LogManager.getManager().addWriter(null, Util.getLogWriter());
-
-		frame =
-			new CEMILData(CEMILData.MC_LDATA_IND, new IndividualAddress(0),
-				new GroupAddress(0, 0, 1), new byte[] { 0, (byte) (0x80 | 1) },
-				Priority.NORMAL);
-		frame2 =
-			new CEMILData(CEMILData.MC_LDATA_IND, new IndividualAddress(0),
-				new GroupAddress(0, 0, 1), new byte[] { 0, (byte) (0x80 | 0) },
-				Priority.URGENT);
-		frameNoDest =
-			new CEMILData(CEMILData.MC_LDATA_IND, new IndividualAddress(0),
-				new GroupAddress(10, 7, 10), new byte[] { 0, (byte) (0x80 | 0) },
-				Priority.URGENT);
+		frame = new CEMILData(CEMILData.MC_LDATA_IND, new IndividualAddress(0), new GroupAddress(0, 0, 1),
+				new byte[] { 0, (byte) (0x80 | 1) }, Priority.NORMAL);
+		frame2 = new CEMILData(CEMILData.MC_LDATA_IND, new IndividualAddress(0), new GroupAddress(0, 0, 1),
+				new byte[] { 0, (byte) (0x80 | 0) }, Priority.URGENT);
+		frameNoDest = new CEMILData(CEMILData.MC_LDATA_IND, new IndividualAddress(0), new GroupAddress(10, 7, 10),
+				new byte[] { 0, (byte) (0x80 | 0) }, Priority.URGENT);
+		routingBusy.set(0);
 	}
 
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#tearDown()
-	 */
-	protected void tearDown() throws Exception
+	@AfterEach
+	void tearDown() throws Exception
 	{
 		if (r != null) {
 			r.close();
 		}
-		LogManager.getManager().removeWriter(null, Util.getLogWriter());
-		super.tearDown();
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.knxnetip.KNXnetIPRouting#send(tuwien.auto.calimero.cemi.CEMI, tuwien.auto.calimero.knxnetip.KNXnetIPConnection.BlockingMode)}.
+	 * Test method for {@link KNXnetIPRouting#send(tuwien.auto.calimero.cemi.CEMI, KNXnetIPConnection.BlockingMode)}.
 	 *
 	 * @throws KNXException
 	 */
+	@Test
 	public final void testSend() throws KNXException
 	{
 		newRouter();
@@ -163,28 +163,24 @@ public class KNXnetIPRouterTest extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.KNXnetIPRouting#send
-	 * (tuwien.auto.calimero.cemi.CEMI,
-	 * tuwien.auto.calimero.knxnetip.KNXnetIPConnection.BlockingMode)}.
+	 * Test method for {@link KNXnetIPRouting#send(tuwien.auto.calimero.cemi.CEMI, KNXnetIPConnection.BlockingMode)}.
 	 *
 	 * @throws KNXException
 	 * @throws UnknownHostException
 	 * @throws SocketException
 	 */
-	public final void testSend2() throws KNXException, SocketException,
-		UnknownHostException
+	@Test
+	public final void testSend2() throws KNXException, SocketException, UnknownHostException
 	{
-		r =
-			new KNXnetIPRouting(NetworkInterface.getByInetAddress(Util.getLocalHost()
-				.getAddress()), InetAddress.getByName(KNXnetIPRouting.DEFAULT_MULTICAST));
+		r = new KNXnetIPRouting(NetworkInterface.getByInetAddress(Util.getLocalHost().getAddress()),
+				InetAddress.getByName(KNXnetIPRouting.DEFAULT_MULTICAST));
 		r.addConnectionListener(l);
 		doSend(frame, noblock);
 		doSend(frame2, noblock);
 		doSend(frameNoDest, noblock);
 	}
 
-	private void doSend(final CEMILData f, final KNXnetIPConnection.BlockingMode m)
-		throws KNXConnectionClosedException
+	private void doSend(final CEMILData f, final KNXnetIPConnection.BlockingMode m) throws KNXConnectionClosedException
 	{
 		r.send(f, m);
 		try {
@@ -194,22 +190,20 @@ public class KNXnetIPRouterTest extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.KNXnetIPRouting#KNXnetIPRouting
-	 * (java.net.NetworkInterface, java.net.InetAddress)}.
+	 * Test method for {@link KNXnetIPRouting#KNXnetIPRouting(java.net.NetworkInterface, java.net.InetAddress)}.
 	 *
 	 * @throws KNXException
 	 * @throws UnknownHostException
 	 * @throws SocketException
 	 */
-	public final void testKNXnetIPRouter() throws SocketException, UnknownHostException,
-		KNXException
+	@Test
+	public final void testKNXnetIPRouter() throws SocketException, UnknownHostException, KNXException
 	{
 		newRouter();
 		assertEquals(KNXnetIPConnection.OK, r.getState());
 		r.close();
-		r =
-			new KNXnetIPRouting(NetworkInterface.getByInetAddress(Util.getLocalHost()
-				.getAddress()), InetAddress.getByName(KNXnetIPRouting.DEFAULT_MULTICAST));
+		r = new KNXnetIPRouting(NetworkInterface.getByInetAddress(Util.getLocalHost().getAddress()),
+				InetAddress.getByName(KNXnetIPRouting.DEFAULT_MULTICAST));
 		r.close();
 		try {
 			r = new KNXnetIPRouting(null, InetAddress.getByName("224.0.23.11"));
@@ -222,6 +216,7 @@ public class KNXnetIPRouterTest extends TestCase
 	/**
 	 * @throws KNXException
 	 */
+	@Test
 	public final void testReceive() throws KNXException
 	{
 		newRouter();
@@ -233,11 +228,11 @@ public class KNXnetIPRouterTest extends TestCase
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.knxnetip.KNXnetIPRouting#setHopCount(int)}.
+	 * Test method for {@link KNXnetIPRouting#setHopCount(int)}.
 	 *
 	 * @throws KNXException
 	 */
+	@Test
 	public final void testSetHopCount() throws KNXException
 	{
 		newRouter();
@@ -265,10 +260,11 @@ public class KNXnetIPRouterTest extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.KNXnetIPRouting#close()}.
+	 * Test method for {@link KNXnetIPRouting#close()}.
 	 *
 	 * @throws KNXException
 	 */
+	@Test
 	public final void testClose() throws KNXException
 	{
 		newRouter();
@@ -283,33 +279,31 @@ public class KNXnetIPRouterTest extends TestCase
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.knxnetip.KNXnetIPRouting#getRemoteAddress()}.
+	 * Test method for {@link KNXnetIPRouting#getRemoteAddress()}.
 	 *
 	 * @throws KNXException
 	 * @throws UnknownHostException
 	 * @throws SocketException
 	 */
-	public final void testGetRemoteAddress() throws KNXException, SocketException,
-		UnknownHostException
+	@Test
+	public final void testGetRemoteAddress() throws KNXException, SocketException, UnknownHostException
 	{
 		newRouter();
-		assertEquals(new InetSocketAddress(KNXnetIPRouting.DEFAULT_MULTICAST,
-			KNXnetIPConnection.DEFAULT_PORT), r.getRemoteAddress());
+		assertEquals(new InetSocketAddress(KNXnetIPRouting.DEFAULT_MULTICAST, KNXnetIPConnection.DEFAULT_PORT),
+				r.getRemoteAddress());
 		r.close();
 		assertTrue(r.getRemoteAddress().getAddress().isAnyLocalAddress());
 		assertTrue(r.getRemoteAddress().getPort() == 0);
 
-		r =
-			new KNXnetIPRouting(NetworkInterface.getByInetAddress(Util.getLocalHost()
-				.getAddress()), InetAddress.getByName("224.0.23.33"));
-		assertEquals(new InetSocketAddress("224.0.23.33", KNXnetIPConnection.DEFAULT_PORT), r
-			.getRemoteAddress());
+		r = new KNXnetIPRouting(NetworkInterface.getByInetAddress(Util.getLocalHost().getAddress()),
+				InetAddress.getByName("224.0.23.33"));
+		assertEquals(new InetSocketAddress("224.0.23.33", KNXnetIPConnection.DEFAULT_PORT), r.getRemoteAddress());
 		r.close();
 		assertTrue(r.getRemoteAddress().getAddress().isAnyLocalAddress());
 		assertTrue(r.getRemoteAddress().getPort() == 0);
 	}
 
+	@Test
 	public void testLostMessageIndication() throws KNXException
 	{
 		newRouter();
@@ -327,11 +321,55 @@ public class KNXnetIPRouterTest extends TestCase
 			Thread.sleep(100);
 		}
 		catch (final InterruptedException e1) {}
-		for (final Iterator i = l.lost.iterator(); i.hasNext();) {
-			final LostMessageEvent e = (LostMessageEvent) i.next();
-			System.out.println("dev.state:" + e.getDeviceState() + ", lost msgs:"
-				+ e.getLostMessages());
+		for (final Iterator<LostMessageEvent> i = l.lost.iterator(); i.hasNext();) {
+			final LostMessageEvent e = i.next();
+			System.out.println("dev.state:" + e.getDeviceState() + ", lost msgs:" + e.getLostMessages());
 		}
+	}
+
+	private static final Duration timeout = Duration.ofMillis(1000);
+
+	@Test
+	void sendRoutingBusy() throws KNXException
+	{
+		newRouter();
+		r.send(new RoutingBusy(0, 100, 0));
+		Assertions.assertTimeout(timeout, () -> {
+			while (routingBusy.get() == 0)
+				Thread.sleep(50);
+		}, "no routing busy notification");
+		assertEquals(1, routingBusy.get());
+	}
+
+	@Test
+	void incrementRoutingBusyCounter() throws KNXException, InterruptedException
+	{
+		newRouter();
+		final int messages = 5;
+		for (int i = 0; i < messages; i++) {
+			r.send(new RoutingBusy(1, 20, 0));
+			Thread.sleep(12);
+		}
+		Assertions.assertTimeout(timeout, () -> {
+			while (routingBusy.get() != messages)
+				Thread.sleep(50);
+		}, "wrong number of routing busy notification");
+		assertEquals(messages, routingBusy.get());
+	}
+
+	@Test
+	void fastSendManyRoutingBusy() throws KNXException
+	{
+		newRouter();
+		final int messages = 40;
+		for (int i = 0; i < messages; i++) {
+			r.send(new RoutingBusy(1, 20, 0));
+		}
+		Assertions.assertTimeout(timeout, () -> {
+			while (routingBusy.get() != messages)
+				Thread.sleep(50);
+		}, "wrong number of routing busy notification");
+		assertEquals(messages, routingBusy.get());
 	}
 
 	private void newRouter() throws KNXException

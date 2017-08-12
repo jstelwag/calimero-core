@@ -37,12 +37,12 @@
 package tuwien.auto.calimero.process;
 
 import tuwien.auto.calimero.GroupAddress;
+import tuwien.auto.calimero.KNXException;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXInvalidResponseException;
+import tuwien.auto.calimero.KNXTimeoutException;
 import tuwien.auto.calimero.datapoint.Datapoint;
 import tuwien.auto.calimero.dptxlator.DPT;
-import tuwien.auto.calimero.exception.KNXException;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXInvalidResponseException;
-import tuwien.auto.calimero.exception.KNXTimeoutException;
 import tuwien.auto.calimero.link.KNXLinkClosedException;
 import tuwien.auto.calimero.link.KNXNetworkLink;
 
@@ -63,9 +63,8 @@ public interface ProcessCommunicator extends ProcessCommunicationBase
 	/**
 	 * Sets the response timeout to wait for a KNX response message to arrive to complete
 	 * a message exchange.
-	 * <p>
 	 *
-	 * @param timeout time in seconds, <code>timeout > 0</code>
+	 * @param timeout time in seconds, <code>timeout &gt; 0</code>
 	 */
 	void setResponseTimeout(int timeout);
 
@@ -80,7 +79,6 @@ public interface ProcessCommunicator extends ProcessCommunicationBase
 
 	/**
 	 * Reads a boolean datapoint value from a group destination.
-	 * <p>
 	 *
 	 * @param dst group destination to read from
 	 * @return the read value of type boolean
@@ -136,28 +134,13 @@ public interface ProcessCommunicator extends ProcessCommunicationBase
 	int readControl(GroupAddress dst) throws KNXException, InterruptedException;
 
 	/**
-	 * @deprecated Use {@link #readFloat(GroupAddress, boolean)}.
-	 * @param dst group destination to read from
-	 * @return the read value of type float
-	 * @throws KNXTimeoutException on a timeout during send or no read response was received
-	 * @throws KNXInvalidResponseException on invalid read response message
-	 * @throws KNXLinkClosedException if network link to KNX network is closed
-	 * @throws KNXFormatException on translation problem of the response data
-	 * @throws KNXException on other read problems
-	 * @throws InterruptedException on interrupt during read
-	 */
-	float readFloat(GroupAddress dst) throws KNXException, InterruptedException;
-
-
-	/**
-	 * Reads a float datapoint value from a group destination.
-	 * <p>
+	 * Reads a floating point datapoint value from a group destination.
 	 *
 	 * @param dst group destination to read from
 	 * @param is4ByteFloat specifies the datapoint floating point type the datapoint is encoded
 	 *        with: either a 2-byte KNX float of DPT main number 9 (<code>false</code>), or a 4-byte
 	 *        float of DPT main number 14 (<code>true</code>)
-	 * @return the read value of type float
+	 * @return the read floating point value
 	 * @throws KNXTimeoutException on a timeout during send or no read response was received
 	 * @throws KNXInvalidResponseException on invalid read response message
 	 * @throws KNXLinkClosedException if network link to KNX network is closed
@@ -165,7 +148,7 @@ public interface ProcessCommunicator extends ProcessCommunicationBase
 	 * @throws KNXException on other read problems
 	 * @throws InterruptedException on interrupt during read
 	 */
-	float readFloat(GroupAddress dst, boolean is4ByteFloat) throws KNXException,
+	double readFloat(GroupAddress dst, boolean is4ByteFloat) throws KNXException,
 		InterruptedException;
 
 	/**
@@ -214,5 +197,6 @@ public interface ProcessCommunicator extends ProcessCommunicationBase
 	 * @return the formerly attached KNX network link, or <code>null</code> if already
 	 *         detached
 	 */
+	@Override
 	KNXNetworkLink detach();
 }

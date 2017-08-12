@@ -40,8 +40,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.StringTokenizer;
 
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 
 /**
  * Translator for KNX DPTs with main number 232, type <b>rgb</b>.
@@ -58,8 +58,9 @@ import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
  *
  * @author T. Wegner
  */
-
 public class DPTXlatorRGB extends DPTXlator {
+	public static final String Description = "RGB Color";
+
 	/**
 	 * DPT ID 232.600, RGB Color; values from <b>0 0 0</b> to <b>255 255 255</b>.
 	 */
@@ -69,10 +70,10 @@ public class DPTXlatorRGB extends DPTXlator {
 	private static final int GREEN = 1;
 	private static final int BLUE = 2;
 
-	private static final Map types;
+	private static final Map<String, DPT> types;
 
 	static {
-		types = new HashMap(3);
+		types = new HashMap<>(3);
 		types.put(DPT_RGB.getID(), DPT_RGB);
 	}
 
@@ -105,6 +106,7 @@ public class DPTXlatorRGB extends DPTXlator {
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getAllValues()
 	 */
+	@Override
 	public String[] getAllValues()
 	{
 		final String[] buf = new String[data.length / 3];
@@ -131,7 +133,8 @@ public class DPTXlatorRGB extends DPTXlator {
 	/* (non-Javadoc)
 	 * @see tuwien.auto.calimero.dptxlator.DPTXlator#getSubTypes()
 	 */
-	public Map getSubTypes()
+	@Override
+	public Map<String, DPT> getSubTypes()
 	{
 		return types;
 	}
@@ -140,7 +143,7 @@ public class DPTXlatorRGB extends DPTXlator {
 	 * @return the subtypes of the RGB translator type
 	 * @see DPTXlator#getSubTypesStatic()
 	 */
-	protected static Map getSubTypesStatic()
+	protected static Map<String, DPT> getSubTypesStatic()
 	{
 		return types;
 	}
@@ -154,6 +157,7 @@ public class DPTXlatorRGB extends DPTXlator {
 				+ " b:" + Short.toString(data[i + BLUE]);
 	}
 
+	@Override
 	protected void toDPT(final String value, final short[] dst, final int index)
 		throws KNXFormatException
 	{
@@ -196,6 +200,7 @@ public class DPTXlatorRGB extends DPTXlator {
 			}
 			if ((r == -1) || (g == -1) || (b == -1))
 				throw newException("invalid color", value);
+
 			set(r, g, b, dst, index);
 		}
 		catch (final KNXIllegalArgumentException e) {

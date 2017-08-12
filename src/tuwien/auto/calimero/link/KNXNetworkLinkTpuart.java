@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2015, 2016 B. Malinowsky
+    Copyright (c) 2015 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -42,12 +42,11 @@ import java.util.Collection;
 import tuwien.auto.calimero.DataUnitBuilder;
 import tuwien.auto.calimero.IndividualAddress;
 import tuwien.auto.calimero.KNXAddress;
+import tuwien.auto.calimero.KNXException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
+import tuwien.auto.calimero.KNXTimeoutException;
 import tuwien.auto.calimero.cemi.CEMILData;
-import tuwien.auto.calimero.exception.KNXException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.exception.KNXTimeoutException;
 import tuwien.auto.calimero.link.medium.KNXMediumSettings;
-import tuwien.auto.calimero.log.LogLevel;
 import tuwien.auto.calimero.serial.KNXPortClosedException;
 import tuwien.auto.calimero.serial.TpuartConnection;
 
@@ -57,6 +56,7 @@ import tuwien.auto.calimero.serial.TpuartConnection;
  * reopened.
  *
  * @author B. Malinowsky
+ * @see Connector
  */
 public class KNXNetworkLinkTpuart extends AbstractLink
 {
@@ -77,7 +77,7 @@ public class KNXNetworkLinkTpuart extends AbstractLink
 	 * @throws KNXException on error establishing the TP-UART connection
 	 */
 	public KNXNetworkLinkTpuart(final String portId, final KNXMediumSettings settings,
-		final Collection acknowledge) throws KNXException
+		final Collection<? extends KNXAddress> acknowledge) throws KNXException
 	{
 		super(new TpuartConnection(portId, ensureDeviceAck(settings, acknowledge)),
 				"tpuart:" + portId, settings);
@@ -123,41 +123,33 @@ public class KNXNetworkLinkTpuart extends AbstractLink
 		c.removeAddress(ack);
 	}
 
+	@Override
 	protected void onSend(final KNXAddress dst, final byte[] msg, final boolean waitForCon)
 		throws KNXTimeoutException, KNXLinkClosedException
 	{
 		try {
 			final IndividualAddress src = new IndividualAddress(new byte[] { msg[4], msg[5] });
-			final boolean trace = logger.isLoggable(LogLevel.TRACE);
-			if (trace)
-				logger.trace("send " + src + "->" + dst + ", "
-						+ (waitForCon ? "blocking for .con" : "non-blocking"));
-			if (trace)
-				logger.trace("cEMI " + DataUnitBuilder.toHex(msg, " "));
+			logger.debug("send {}->{}, {}", src, dst,
+					(waitForCon ? "blocking for .con" : "non-blocking"));
+			if (logger.isTraceEnabled())
+				logger.trace("cEMI {}", DataUnitBuilder.toHex(msg, " "));
 			c.send(msg, waitForCon);
 		}
-		catch (final InterruptedException e) {
+		catch (final InterruptedException | KNXPortClosedException e) {
 			close();
-			Thread.currentThread().interrupt();
-			throw new KNXLinkClosedException(getName(), e);
-		}
-		catch (final KNXPortClosedException e) {
-			close();
+			if (e instanceof InterruptedException)
+				Thread.currentThread().interrupt();
 			throw new KNXLinkClosedException(getName(), e);
 		}
 	}
 
+	@Override
 	protected void onSend(final CEMILData msg, final boolean waitForCon)
 	{}
 
-	protected void onClose()
-	{
-		c.close();
-	}
-
 	// if possible, add this link to the list of addresses to acknowledge
-	private static Collection ensureDeviceAck(final KNXMediumSettings settings,
-		final Collection acknowledge)
+	private static Collection<? extends KNXAddress> ensureDeviceAck(final KNXMediumSettings settings,
+		final Collection<? extends KNXAddress> acknowledge)
 	{
 		if (settings.getMedium() != KNXMediumSettings.MEDIUM_TP1)
 			throw new KNXIllegalArgumentException("TP-UART link supports only TP1 medium");
@@ -166,7 +158,7 @@ public class KNXNetworkLinkTpuart extends AbstractLink
 		if (device.getDevice() == 0 || device.getDevice() == 0xff)
 			return acknowledge;
 
-		final ArrayList l = new ArrayList(acknowledge);
+		final ArrayList<KNXAddress> l = new ArrayList<>(acknowledge);
 		l.add(device);
 		return l;
 	}

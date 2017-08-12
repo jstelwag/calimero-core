@@ -38,17 +38,14 @@ package tuwien.auto.calimero.dptxlator;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
 import junit.framework.TestCase;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 import tuwien.auto.calimero.Util;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.log.LogManager;
 
 /**
  * @author B. Malinowsky
@@ -69,6 +66,7 @@ public class DPTXlator4ByteFloatTest extends TestCase
 
 	private final String zero = "0.0";
 	private final String[] strings = { min, max, zero, value1, value2};
+	// TODO achieving a nice formatting of floats is cumbersome, use Java defaults here
 	private final String[] strCmp = { "1.4E-45", "3.40282E38", "0.0", "735", "54732.332"};
 
 	private final float[] floats =
@@ -84,7 +82,7 @@ public class DPTXlator4ByteFloatTest extends TestCase
 		toBytes(Float.floatToIntBits(floats[4]))[0], toBytes(Float.floatToIntBits(floats[4]))[1],
 		toBytes(Float.floatToIntBits(floats[4]))[2], toBytes(Float.floatToIntBits(floats[4]))[3] };
 
-	private final DPT[] dpts = (DPT[]) DPTXlator4ByteFloat.getSubTypesStatic().values()
+	private final DPT[] dpts = DPTXlator4ByteFloat.getSubTypesStatic().values()
 			.toArray(new DPT[1]);
 
 	private static byte[] toBytes(final int i)
@@ -103,22 +101,13 @@ public class DPTXlator4ByteFloatTest extends TestCase
 	/* (non-Javadoc)
 	 * @see junit.framework.TestCase#setUp()
 	 */
+	@Override
 	protected void setUp() throws Exception
 	{
 		super.setUp();
-		LogManager.getManager().addWriter("DPTXlator", Util.getLogWriter());
+		Util.setupLogging("DPTXlator");
 		x = new DPTXlator4ByteFloat(DPTXlator4ByteFloat.DPT_ACCELERATION);
 		t = new DPTXlator4ByteFloat(DPTXlator4ByteFloat.DPT_ELECTRIC_FLUX);
-	}
-
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#tearDown()
-	 */
-	protected void tearDown() throws Exception
-	{
-		Thread.sleep(100);
-		LogManager.getManager().removeWriter("DPTXlator", Util.getLogWriter());
-		super.tearDown();
 	}
 
 	/**
@@ -167,7 +156,7 @@ public class DPTXlator4ByteFloatTest extends TestCase
 	 */
 	public void testGetSubTypes()
 	{
-		final Map types = x.getSubTypes();
+		final Map<String, DPT> types = x.getSubTypes();
 		assertEquals(80, types.size());
 	}
 
@@ -176,18 +165,12 @@ public class DPTXlator4ByteFloatTest extends TestCase
 	 */
 	public void testGetSubTypesStatic()
 	{
-		final Map types = DPTXlator4ByteFloat.getSubTypesStatic();
+		final Map<String, DPT> types = DPTXlator4ByteFloat.getSubTypesStatic();
 		assertEquals(80, types.size());
-		System.out.println("\n4 Byte Float DPTs:");
-		final Collection c = types.values();
-		for (final Iterator i = c.iterator(); i.hasNext();) {
-			final DPT dpt = (DPT) i.next();
-			System.out.println(dpt.toString());
-		}
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.dptxlator.DPTXlator4ByteFloat#DPTXlator4ByteFloat(tuwien.auto.calimero.dptxlator.DPT)}.
+	 * Test method for {@link DPTXlator4ByteFloat#DPTXlator4ByteFloat(tuwien.auto.calimero.dptxlator.DPT)}.
 	 */
 	public void testDPTXlator4ByteFloatDPT()
 	{
@@ -268,7 +251,7 @@ public class DPTXlator4ByteFloatTest extends TestCase
 		final float bigvalue = 123456.78f;
 		final Locale saved = Locale.getDefault();
 		final Locale[] locales = Locale.getAvailableLocales();
-		final List output = new ArrayList();
+		final List<String> output = new ArrayList<>();
 		for (int i = 0; i < locales.length; ++i) {
 			final Locale l = locales[i];
 			Locale.setDefault(l);
@@ -281,8 +264,8 @@ public class DPTXlator4ByteFloatTest extends TestCase
 		Locale.setDefault(saved);
 		// check if outputs are the same
 		for(int i = 1; i < output.size(); ++i) {
-			final String first = (String) output.get(i - 1);
-			final String second = (String) output.get(i);
+			final String first = output.get(i - 1);
+			final String second = output.get(i);
 			assertEquals(first, second);
 		}
 	}

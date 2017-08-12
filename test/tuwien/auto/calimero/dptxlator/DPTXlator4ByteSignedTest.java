@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2009, 2015 B. Malinowsky
+    Copyright (c) 2009, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -37,15 +37,11 @@
 package tuwien.auto.calimero.dptxlator;
 
 import java.util.Arrays;
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.Map;
 
 import junit.framework.TestCase;
+import tuwien.auto.calimero.KNXFormatException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 import tuwien.auto.calimero.Util;
-import tuwien.auto.calimero.exception.KNXFormatException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
-import tuwien.auto.calimero.log.LogManager;
 
 /**
  * @author B. Malinowsky
@@ -83,21 +79,12 @@ public class DPTXlator4ByteSignedTest extends TestCase
 	/* (non-Javadoc)
 	 * @see junit.framework.TestCase#setUp()
 	 */
+	@Override
 	protected void setUp() throws Exception
 	{
 		super.setUp();
-		LogManager.getManager().addWriter("DPTXlator", Util.getLogWriter());
+		Util.setupLogging("DPTXlator");
 		t = new DPTXlator4ByteSigned(DPTXlator4ByteSigned.DPT_COUNT);
-	}
-
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#tearDown()
-	 */
-	protected void tearDown() throws Exception
-	{
-		Thread.sleep(100);
-		LogManager.getManager().removeWriter("DPTXlator", Util.getLogWriter());
-		super.tearDown();
 	}
 
 	/**
@@ -259,13 +246,6 @@ public class DPTXlator4ByteSignedTest extends TestCase
 	public void testGetSubTypes()
 	{
 		assertEquals(9, t.getSubTypes().size());
-		final Map types = t.getSubTypes();
-		System.out.println("\n4 Byte Signed DPTs:");
-		final Collection c = types.values();
-		for (final Iterator i = c.iterator(); i.hasNext();) {
-			final DPT dpt = (DPT) i.next();
-			System.out.println(dpt.toString());
-		}
 	}
 
 	/**

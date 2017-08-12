@@ -1,6 +1,6 @@
 /*
     Calimero 2 - A library for KNX network access
-    Copyright (c) 2006, 2015 B. Malinowsky
+    Copyright (c) 2006, 2016 B. Malinowsky
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -36,27 +36,37 @@
 
 package tuwien.auto.calimero.link;
 
-import junit.framework.TestCase;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import tag.FT12;
 import tuwien.auto.calimero.CloseEvent;
 import tuwien.auto.calimero.FrameEvent;
 import tuwien.auto.calimero.IndividualAddress;
+import tuwien.auto.calimero.KNXException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 import tuwien.auto.calimero.Util;
 import tuwien.auto.calimero.cemi.CEMIBusMon;
-import tuwien.auto.calimero.exception.KNXException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
 import tuwien.auto.calimero.knxnetip.Debug;
 import tuwien.auto.calimero.link.medium.PLSettings;
 import tuwien.auto.calimero.link.medium.RawFrame;
 import tuwien.auto.calimero.link.medium.TPSettings;
-import tuwien.auto.calimero.log.LogManager;
 
 /**
  * Test for KNXNetworkMonitorFT12.
- * <p>
  *
  * @author B. Malinowsky
  */
-public class KNXNetworkMonitorFT12Test extends TestCase
+@FT12
+public class KNXNetworkMonitorFT12Test
 {
 	private KNXNetworkMonitor mon;
 	private MonListener lmon;
@@ -67,10 +77,7 @@ public class KNXNetworkMonitorFT12Test extends TestCase
 		volatile boolean closed;
 		volatile RawFrame raw;
 
-		/* (non-Javadoc)
-		 * @see tuwien.auto.calimero.link.event.LinkListener#indication
-		 * (tuwien.auto.calimero.FrameEvent)
-		 */
+		@Override
 		public void indication(final FrameEvent e)
 		{
 			assertNotNull(e);
@@ -87,10 +94,7 @@ public class KNXNetworkMonitorFT12Test extends TestCase
 			// System.out.println(((MonitorFrameEvent) e).getRawFrame());
 		}
 
-		/* (non-Javadoc)
-		 * @see tuwien.auto.calimero.link.event.LinkListener#linkClosed
-		 * (tuwien.auto.calimero.CloseEvent)
-		 */
+		@Override
 		public void linkClosed(final CloseEvent e)
 		{
 			assertNotNull(e);
@@ -101,64 +105,45 @@ public class KNXNetworkMonitorFT12Test extends TestCase
 		}
 	}
 
-	/**
-	 * @param name
-	 */
-	public KNXNetworkMonitorFT12Test(final String name)
+	@BeforeEach
+	void setUp() throws Exception
 	{
-		super(name);
-	}
-
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#setUp()
-	 */
-	protected void setUp() throws Exception
-	{
-		super.setUp();
-		LogManager.getManager().addWriter(null, Util.getLogWriter());
 		try {
 			// prevents access problems with a just previously closed port
 			Thread.sleep(50);
 			mon = new KNXNetworkMonitorFT12(Util.getSerialPort(), TPSettings.TP1);
 		}
 		catch (final Exception e) {
-			LogManager.getManager().removeWriter(null, Util.getLogWriter());
+			Util.tearDownLogging();
 			throw e;
 		}
 		lmon = new MonListener();
 		mon.addMonitorListener(lmon);
 	}
 
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#tearDown()
-	 */
-	protected void tearDown() throws Exception
+	@AfterEach
+	void tearDown() throws Exception
 	{
 		if (mon != null)
 			mon.close();
-		LogManager.getManager().removeWriter(null, Util.getLogWriter());
-		super.tearDown();
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.link.KNXNetworkMonitorFT12#KNXNetworkMonitorFT12
-	 * (java.lang.String, tuwien.auto.calimero.link.medium.KNXMediumSettings)}.
+	 * Test method for {@link KNXNetworkMonitorFT12#KNXNetworkMonitorFT12(java.lang.String, medium.KNXMediumSettings)}.
 	 *
 	 * @throws KNXException
 	 */
-	public final void testKNXNetworkMonitorFT12StringKNXMediumSettings()
-		throws KNXException
+	@Test
+	public final void testKNXNetworkMonitorFT12StringKNXMediumSettings() throws KNXException
 	{
 		mon.close();
 		mon = new KNXNetworkMonitorFT12(Util.getSerialPortID(), TPSettings.TP1);
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.link.KNXNetworkMonitorFT12#KNXNetworkMonitorFT12(int,
-	 * tuwien.auto.calimero.link.medium.KNXMediumSettings)}.
+	 * Test method for {@link KNXNetworkMonitorFT12#KNXNetworkMonitorFT12(int, medium.KNXMediumSettings)}.
 	 */
+	@Test
 	public final void testKNXNetworkMonitorFT12IntKNXMediumSettings()
 	{
 		mon.close();
@@ -172,9 +157,9 @@ public class KNXNetworkMonitorFT12Test extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.link.KNXNetworkMonitorFT12#setKNXMedium
-	 * (tuwien.auto.calimero.link.medium.KNXMediumSettings)}.
+	 * Test method for {@link KNXNetworkMonitorFT12#setKNXMedium(medium.KNXMediumSettings)}.
 	 */
+	@Test
 	public final void testSetKNXMedium()
 	{
 		try {
@@ -199,10 +184,11 @@ public class KNXNetworkMonitorFT12Test extends TestCase
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.link.KNXNetworkMonitorFT12#setDecodeRawFrames(boolean)}.
+	 * Test method for {@link KNXNetworkMonitorFT12#setDecodeRawFrames(boolean)}.
+	 *
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testSetDecodeRawFrames() throws InterruptedException
 	{
 		mon.setDecodeRawFrames(true);
@@ -217,13 +203,14 @@ public class KNXNetworkMonitorFT12Test extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.link.KNXNetworkMonitorFT12#getName()}.
+	 * Test method for {@link KNXNetworkMonitorFT12#getName()}.
 	 */
+	@Test
 	public final void testGetName()
 	{
 		String n = mon.getName();
 		final String port = Util.getSerialPortID();
-		assertTrue(port, n.indexOf(port) > -1);
+		assertTrue(n.indexOf(port) > -1, port);
 		assertTrue(n.indexOf("monitor") > -1);
 		mon.close();
 		n = mon.getName();
@@ -232,9 +219,11 @@ public class KNXNetworkMonitorFT12Test extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.link.KNXNetworkMonitorFT12#close()}.
+	 * Test method for {@link KNXNetworkMonitorFT12#close()}.
+	 *
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testClose() throws InterruptedException
 	{
 		System.out.println(mon.toString());

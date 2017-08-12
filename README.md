@@ -1,24 +1,33 @@
-Calimero-core
+Calimero-core [![Build Status](https://travis-ci.org/calimero-project/calimero-core.svg?branch=master)](https://travis-ci.org/calimero-project/calimero-core)
 =============
 
-Library with core functionality for KNX network access.
+Calimero-core library for Java SE, specifically Java SE Embedded 8. The minimum required runtime environment is 
+the profile [compact1](http://www.oracle.com/technetwork/java/embedded/resources/tech/compact-profiles-overview-2157132.html).
 
-* The Java 8 version is [on this branch](https://github.com/calimero-project/calimero/tree/feat/jse-embd8-c1).
-* A port for [Java ME Embedded 8.1](http://www.oracle.com/technetwork/java/embedded/javame/embed-me/overview/index.html) is [on this branch](https://github.com/calimero-project/calimero/tree/jme-embd).
+**Main breaking changes from earlier versions of Calimero:**
 
-Version 2.3 is the last version compatible to Java ME CDC (JSR 218) with the Foundation Profile, i.e., "Java 1.4".
-Any later versions require Java SE Embedded 8/compact1.
+* Some API methods got updated to use `@FunctionalInterface`s
+* Use of `enum`s
+* XML processing defaults to the Streaming API for XML (StAX)
+* Use of the [Simple Logging Facade for Java (slf4j)](http://www.slf4j.org/)
+* Remove or replace `@Deprecated` parts of the library
 
+### Embedded Profile
+
+Java SE Embedded 8 with the compact1 profile is similar to Java ME CDC and Foundation Profile, 
+providing an environment for headless applications on embedded devices that require a small footprint.
+
+Because of the big step in the minimum required runtime environment, the Calimero public API for Embedded 8 is not kept binary compatible to Calimero for Java ME CDC. Overall, the required modifications are minimal.
 
 Download
 --------
 
 ~~~ sh
 # Either using git
-$ git clone https://github.com/calimero-project/calimero-core.git
+$ git clone https://github.com/calimero-project/calimero.git calimero-core
 
 # Or using hub
-$ hub clone calimero-project/calimero-core
+$ hub clone calimero-project/calimero calimero-core
 ~~~
 
 Supported Features
@@ -27,10 +36,10 @@ Supported Features
 ### Access Protocols
 * KNXnet/IP
 * KNX IP
-* KNX RF USB (Java 8 branch only)
-* KNX USB (Java 8 branch only)
+* KNX RF USB
+* KNX USB
 * KNX FT1.2 Protocol (serial connections)
-* TP-UART
+* TP-UART (access TP1 networks over serial connections)
 
 #### KNXnet/IP
 * Discovery and Self-description
@@ -64,13 +73,13 @@ Supported Features
 * 17.x - Scene number
 * 18.x - Scene control
 * 19.x - Date with time
-* 20.x - 8 Bit enumeration, e.g., Occupancy Mode, Blinds Control Mode (Java 8 branch only)
+* 20.x - 8 Bit enumeration, e.g., Occupancy Mode, Blinds Control Mode
 * 28.x - UTF-8 string
 * 29.x - 64 Bit signed value, e.g., Active Energy, Apparent energy
 * 232.x - RGB color value
 
 ### Busmonitor
-Access via KNXnet/IP, KNX USB, TP-UART, and FT1.2
+Access via KNXnet/IP, KNX USB, KNX RF USB, and FT1.2 (KNX RF USB is not tested -- no busmonitor hardware available)
 
 #### Raw Frame Decoding
 * TP1
@@ -91,22 +100,17 @@ Access via KNXnet/IP, KNX USB, TP-UART, and FT1.2
 * EMI1/2 Busmonitor
 
 ### Network Buffer
-* State/command-based datapoint buffer to answer L-Data.reqs, and buffer incoming L-Data.ind updates
+* State/command-based datapoint buffer to answer .reqs, buffer incoming .ind updates
 
 
-More Features, Tools, Examples
-------------------------------
+Logging
+-------
 
-* [introduction](https://github.com/calimero-project/introduction) contains code examples for programming with Calimero.
+Calimero uses the [Simple Logging Facade for Java (slf4j)](http://www.slf4j.org/). Bind any desired logging frameworks of your choice. The default maven dependency is the [Simple Logger](http://www.slf4j.org/api/org/slf4j/impl/SimpleLogger.html). It logs everything to standard output. The simple logger can be configured via the file `simplelogger.properties`, JVM system properties, or `java` command line options, e.g., `-Dorg.slf4j.simpleLogger.defaultLogLevel=warn`.
 
-* [calimero-tools](https://github.com/calimero-project/calimero-tools) contains command-line tools for KNX process communication, monitoring, and management.
+Testing
+-------
 
-* [calimero-gui](https://github.com/calimero-project/calimero-gui) contains a graphical user interface for process communication, monitoring, and management.
+For unit tests, Calimero provides a [test network](https://github.com/calimero-project/calimero-testnetwork), consisting of a [KNXnet/IP server](https://github.com/calimero-project/calimero-server) and a virtual KNX network with two [KNX devices](https://github.com/calimero-project/calimero-device). The complete test network is implemented in software, and can be executed in any J2SE runtime environment. It provides the remote KNXnet/IP endpoint for executing unit tests for KNXnet/IP tunneling, busmonitoring, routing, device management, and KNX IP protocols. The same setup is used for Calimero Travis CI.
 
-* [calimero-server](https://github.com/calimero-project/calimero-server) is the Calimero KNXnet/IP Server.
-
-* [calimero-device](https://github.com/calimero-project/calimero-device) is the communication stack for a KNX device.
-
-* [serial-native](https://github.com/calimero-project/serial-native) provides native libraries for serial port access (using JNI).
-
-* [import-ets4-xml](https://github.com/calimero-project/import-ets4-xml) allows importing ETS XML KNX datapoints into Calimero XML.
+Currently, the TP-UART and FT1.2 protocols can only be tested if the corresponding hardware is available. 

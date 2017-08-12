@@ -36,23 +36,36 @@
 
 package tuwien.auto.calimero.knxnetip;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
+import java.util.Iterator;
+import java.util.List;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import junit.framework.AssertionFailedError;
-import junit.framework.TestCase;
+import tag.KnxnetIP;
+import tuwien.auto.calimero.KNXException;
+import tuwien.auto.calimero.KNXIllegalArgumentException;
 import tuwien.auto.calimero.Util;
-import tuwien.auto.calimero.exception.KNXException;
-import tuwien.auto.calimero.exception.KNXIllegalArgumentException;
+import tuwien.auto.calimero.knxnetip.Discoverer.Result;
 import tuwien.auto.calimero.knxnetip.servicetype.DescriptionResponse;
 import tuwien.auto.calimero.knxnetip.servicetype.SearchResponse;
-import tuwien.auto.calimero.log.LogManager;
 
 /**
  * @author B. Malinowsky
  */
-public class DiscovererTest extends TestCase
+@KnxnetIP
+public class DiscovererTest
 {
 	private Discoverer ddef;
 	private Discoverer dnat;
@@ -60,30 +73,16 @@ public class DiscovererTest extends TestCase
 	// search/description timeout in seconds
 	private final int timeout = 3;
 
-	/**
-	 * @param name name for test case
-	 */
-	public DiscovererTest(final String name)
+	@BeforeEach
+	void init() throws Exception
 	{
-		super(name);
-	}
-
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#setUp()
-	 */
-	protected void setUp() throws Exception
-	{
-		super.setUp();
 		ddef = new Discoverer(0, false);
 		dnat = new Discoverer(0, true);
 		dmcast = new Discoverer(null, 0, false, true);
-		LogManager.getManager().addWriter(null, Util.getLogWriter());
 	}
 
-	/* (non-Javadoc)
-	 * @see junit.framework.TestCase#tearDown()
-	 */
-	protected void tearDown() throws Exception
+	@AfterEach
+	void tearDown() throws Exception
 	{
 		if (ddef != null)
 			ddef.stopSearch();
@@ -91,8 +90,6 @@ public class DiscovererTest extends TestCase
 			dnat.stopSearch();
 		if (dmcast != null)
 			dmcast.stopSearch();
-		LogManager.getManager().removeWriter(null, Util.getLogWriter());
-		super.tearDown();
 	}
 
 	/**
@@ -100,6 +97,7 @@ public class DiscovererTest extends TestCase
 	 *
 	 * @throws KNXException
 	 */
+	@Test
 	public final void testDiscoverer() throws KNXException
 	{
 		try {
@@ -116,38 +114,39 @@ public class DiscovererTest extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.Discoverer#clearSearchResponses()}.
+	 * Test method for {@link Discoverer#clearSearchResponses()}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testClearSearchResponses() throws KNXException, InterruptedException
 	{
 		ddef.startSearch(timeout, true);
-		assertTrue(ddef.getSearchResponses().length > 0);
+		assertTrue(ddef.getSearchResponses().size() > 0);
 		ddef.clearSearchResponses();
-		assertTrue(ddef.getSearchResponses().length == 0);
+		assertTrue(ddef.getSearchResponses().size() == 0);
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.Discoverer#getDescription
-	 * (java.net.InetSocketAddress, int)}.
+	 * Test method for {@link Discoverer#getDescription(java.net.InetSocketAddress, int)}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testGetDescription() throws KNXException, InterruptedException
 	{
 		doGetDesc(ddef);
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.Discoverer#getDescription
-	 * (java.net.InetSocketAddress, int)}.
+	 * Test method for {@link Discoverer#getDescription(java.net.InetSocketAddress, int)}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testNATGetDescription() throws KNXException, InterruptedException
 	{
 		if (!Util.TEST_NAT) {
@@ -165,35 +164,38 @@ public class DiscovererTest extends TestCase
 	private void doGetDesc(final Discoverer d) throws KNXException, InterruptedException
 	{
 		d.startSearch(timeout, true);
-		final SearchResponse[] search = d.getSearchResponses();
-		assertTrue(search.length > 0);
-		for (int i = 0; i < search.length; ++i) {
-			final DescriptionResponse r = d.getDescription(new InetSocketAddress(
-				search[i].getControlEndpoint().getAddress(), search[i]
-					.getControlEndpoint().getPort()), timeout);
+		final List<Result<SearchResponse>> search = d.getSearchResponses();
+		assertTrue(search.size() > 0);
+		for (final Iterator<Result<SearchResponse>> i = search.iterator(); i.hasNext();) {
+			final Result<SearchResponse> result = i.next();
+			final SearchResponse response = result.getResponse();
+			final Result<DescriptionResponse> r = d.getDescription(new InetSocketAddress(
+					response.getControlEndpoint().getAddress(), response.getControlEndpoint().getPort()), timeout);
 			assertNotNull(r);
-			System.out.println("doGetDesc for " + search[i].getControlEndpoint() + " = "
-				+ r.getDevice().getName());
+//			System.out.println(
+//					"doGetDesc for " + response.getControlEndpoint() + " = " + r.getResponse().getDevice().getName());
 		}
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.Discoverer#getSearchResponses()}.
+	 * Test method for {@link Discoverer#getSearchResponses()}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testGetSearchResponses() throws KNXException, InterruptedException
 	{
 		doGetSearchRes(ddef);
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.Discoverer#getSearchResponses()}.
+	 * Test method for {@link Discoverer#getSearchResponses()}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testNATGetSearchResponses() throws KNXException, InterruptedException
 	{
 		if (!Util.TEST_NAT) {
@@ -209,11 +211,12 @@ public class DiscovererTest extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.Discoverer#getSearchResponses()}.
+	 * Test method for {@link Discoverer#getSearchResponses()}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testMcastGetSearchResponses() throws KNXException, InterruptedException
 	{
 		doGetSearchRes(dmcast);
@@ -222,47 +225,49 @@ public class DiscovererTest extends TestCase
 	private void doGetSearchRes(final Discoverer d) throws KNXException, InterruptedException
 	{
 		d.startSearch(timeout, true);
-		final SearchResponse[] search = d.getSearchResponses();
-		assertTrue(search.length > 0);
-		for (int i = 0; i < search.length; ++i) {
-			assertNotNull(search[i]);
-			System.out.println("doGetSearchRes " + i + " = " + search[i].getControlEndpoint()
-					+ ", " + search[i].getServiceFamilies());
+		final List<Result<SearchResponse>> search = d.getSearchResponses();
+		assertTrue(search.size() > 0);
+		for (final Iterator<Result<SearchResponse>> i = search.iterator(); i.hasNext();) {
+			final Result<SearchResponse> result = i.next();
+			final SearchResponse response = result.getResponse();
+			assertNotNull(response);
+//			System.out.println("doGetSearchRes " + i + " = " + response.getControlEndpoint() + ", "
+//					+ response.getServiceFamilies());
 		}
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.Discoverer#startSearch
-	 * (int, java.net.NetworkInterface, int, boolean)}.
+	 * Test method for {@link Discoverer#startSearch(int, java.net.NetworkInterface, int, boolean)}.
 	 *
 	 * @throws KNXException
 	 * @throws SocketException
 	 * @throws InterruptedException on interrupted thread
 	 */
-	public final void testStartSearchIntNetworkInterfaceIntBoolean() throws SocketException,
-		KNXException, InterruptedException
+	@Test
+	public final void testStartSearchIntNetworkInterfaceIntBoolean()
+		throws SocketException, KNXException, InterruptedException
 	{
 		doStartSearchIF(ddef, false);
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.Discoverer#startSearch
-	 * (int, java.net.NetworkInterface, int, boolean)}.
+	 * Test method for {@link Discoverer#startSearch(int, java.net.NetworkInterface, int, boolean)}.
 	 *
-	 * @throws KNXException
 	 * @throws SocketException
 	 * @throws InterruptedException on interrupted thread
 	 */
-	public final void testNATStartSearchIntNetworkInterfaceIntBoolean() throws SocketException,
-		KNXException, InterruptedException
+	@Test
+	public final void testNATStartSearchIntNetworkInterfaceIntBoolean() throws SocketException, InterruptedException
 	{
 		if (!Util.TEST_NAT) {
-			System.out.println("\n==== skip "
-					+ "testNATStartSearchIntNetworkInterfaceIntBoolean ====\n");
+			System.out.println("\n==== skip testNATStartSearchIntNetworkInterfaceIntBoolean ====\n");
 			return;
 		}
 		try {
 			doStartSearchIF(dnat, false);
+		}
+		catch (final KNXException e) {
+			// don't fail, we might use an IPv6 socket, and on some OS IPv6 sockets can't join IPv4 multicast groups
 		}
 		catch (final AssertionFailedError e) {
 			fail("Probably no NAT support on router, " + e.getMessage());
@@ -270,15 +275,15 @@ public class DiscovererTest extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.Discoverer#startSearch
-	 * (int, java.net.NetworkInterface, int, boolean)}.
+	 * Test method for {@link Discoverer#startSearch(int, java.net.NetworkInterface, int, boolean)}.
 	 *
 	 * @throws KNXException
 	 * @throws SocketException
 	 * @throws InterruptedException on interrupted thread
 	 */
-	public final void testMcastStartSearchIntNetworkInterfaceIntBoolean() throws SocketException,
-		KNXException, InterruptedException
+	@Test
+	public final void testMcastStartSearchIntNetworkInterfaceIntBoolean()
+		throws SocketException, KNXException, InterruptedException
 	{
 		doStartSearchIF(dmcast, true);
 	}
@@ -286,50 +291,48 @@ public class DiscovererTest extends TestCase
 	private void doStartSearchIF(final Discoverer d, final boolean usesMulticast)
 		throws SocketException, KNXException, InterruptedException
 	{
-		d.startSearch(40000, NetworkInterface.getByInetAddress(Util.getLocalHost().getAddress()),
-				timeout, true);
-		final SearchResponse[] search = d.getSearchResponses();
-		assertTrue(search.length > 0);
-		for (int i = 0; i < search.length; ++i) {
-			assertNotNull(search[i]);
-			System.out.println("doStartSearchIF " + i + " = "
-				+ search[i].getControlEndpoint() + ", " + search[i].getServiceFamilies());
+		d.startSearch(40000, NetworkInterface.getByInetAddress(Util.getLocalHost().getAddress()), timeout, true);
+		final List<Result<SearchResponse>> search = d.getSearchResponses();
+		assertTrue(search.size() > 0);
+		for (final Iterator<Result<SearchResponse>> i = search.iterator(); i.hasNext();) {
+			final Result<SearchResponse> result = i.next();
+			final SearchResponse response = result.getResponse();
+			assertNotNull(response);
+//			System.out.println("doStartSearchIF " + i + " = " + response.getControlEndpoint() + ", "
+//					+ response.getServiceFamilies());
 		}
 
 		// start 2 searches concurrently
-		final int responses = d.getSearchResponses().length;
+		final int responses = d.getSearchResponses().size();
 		d.clearSearchResponses();
-		d.startSearch(30000, NetworkInterface.getByInetAddress(Util.getLocalHost().getAddress()),
-				timeout, false);
-		d.startSearch(30001, NetworkInterface.getByInetAddress(Util.getLocalHost().getAddress()),
-				timeout, false);
+		d.startSearch(30000, NetworkInterface.getByInetAddress(Util.getLocalHost().getAddress()), timeout, false);
+		d.startSearch(30001, NetworkInterface.getByInetAddress(Util.getLocalHost().getAddress()), timeout, false);
 		while (d.isSearching())
 			Thread.sleep(200);
-		// multicasts are not only received on sending IF
-		// -> 2 * responses is not always true: the number of responses can vary based on network setup
-		final int expected = usesMulticast ? 2 * responses : 2 * responses;
-		final int actual = d.getSearchResponses().length;
-		assertTrue("expected = " + expected + ", actual = " + actual, expected <= actual);
+		final int expected = responses;
+		final int actual = d.getSearchResponses().size();
+		assertEquals("expected = " + expected + ", actual = " + actual, expected, actual);
 	}
 
 	/**
-	 * Test method for
-	 * {@link tuwien.auto.calimero.knxnetip.Discoverer#startSearch(int, boolean)}.
+	 * Test method for {@link Discoverer#startSearch(int, boolean)}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testStartSearchIntBoolean() throws KNXException, InterruptedException
 	{
-		doStartSeach(ddef, false);
+		doStartSearch(ddef, false);
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.Discoverer#startSearch(int, boolean)}.
+	 * Test method for {@link Discoverer#startSearch(int, boolean)}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testNATStartSearchIntBoolean() throws KNXException, InterruptedException
 	{
 		if (!Util.TEST_NAT) {
@@ -337,7 +340,7 @@ public class DiscovererTest extends TestCase
 			return;
 		}
 		try {
-			doStartSeach(dnat, false);
+			doStartSearch(dnat, false);
 		}
 		catch (final AssertionFailedError e) {
 			fail("Probably no NAT support on router, " + e.getMessage());
@@ -345,22 +348,22 @@ public class DiscovererTest extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.Discoverer#startSearch(int, boolean)}.
+	 * Test method for {@link Discoverer#startSearch(int, boolean)}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testMcastStartSearchIntBoolean() throws KNXException, InterruptedException
 	{
-		doStartSeach(dmcast, true);
+		doStartSearch(dmcast, true);
 	}
 
 	/**
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
-	private void doStartSeach(final Discoverer d, final boolean usesMulticast) throws KNXException,
-		InterruptedException
+	private void doStartSearch(final Discoverer d, final boolean usesMulticast) throws KNXException, InterruptedException
 	{
 		try {
 			d.startSearch(-1, true);
@@ -370,9 +373,9 @@ public class DiscovererTest extends TestCase
 		d.startSearch(timeout, false);
 		while (d.isSearching())
 			Thread.sleep(100);
-		assertTrue(d.getSearchResponses().length > 0);
+		assertTrue(d.getSearchResponses().size() > 0);
 		assertFalse(d.isSearching());
-		final int responses = d.getSearchResponses().length;
+		final int responses = d.getSearchResponses().size();
 		d.clearSearchResponses();
 
 		// do two searches same time
@@ -382,19 +385,19 @@ public class DiscovererTest extends TestCase
 			Thread.sleep(100);
 
 		// multicasts are not only received on sending IF
-		// but 3 * responses is not always true: the number of responses can
-		// vary based on network setup
-		final int expected = usesMulticast ? 3 * responses : 2 * responses;
-		final int actual = d.getSearchResponses().length;
-		assertTrue("expected = " + expected + ", actual = " + actual, (actual == 1) || (expected <= actual));
+		// the number of responses can vary based on network setup
+		final int expected = responses;
+		final int actual = d.getSearchResponses().size();
+		assertEquals("expected = " + expected + ", actual = " + actual, expected, actual);
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.Discoverer#stopSearch()}.
+	 * Test method for {@link Discoverer#stopSearch()}.
 	 *
 	 * @throws InterruptedException on interrupted thread
 	 * @throws KNXException
 	 */
+	@Test
 	public final void testStopSearch() throws InterruptedException, KNXException
 	{
 		ddef.startSearch(timeout, false);
@@ -402,23 +405,24 @@ public class DiscovererTest extends TestCase
 		ddef.startSearch(timeout, false);
 		Thread.sleep(10);
 		ddef.stopSearch();
-		final int responses = ddef.getSearchResponses().length;
+		final int responses = ddef.getSearchResponses().size();
 		assertFalse(ddef.isSearching());
 		Thread.sleep(timeout);
 		assertFalse(ddef.isSearching());
-		assertEquals(responses, ddef.getSearchResponses().length);
+		assertEquals(responses, ddef.getSearchResponses().size());
 
 		final class Stopper extends Thread
 		{
 			volatile int res;
 
+			@Override
 			public void run()
 			{
 				try {
 					sleep(500);
 				}
 				catch (final InterruptedException e) {}
-				res = ddef.getSearchResponses().length;
+				res = ddef.getSearchResponses().size();
 				ddef.stopSearch();
 			}
 		}
@@ -428,15 +432,16 @@ public class DiscovererTest extends TestCase
 		// run blocking, so we're sure stopper stops search
 		ddef.startSearch(0, true);
 		stopper.join();
-		assertEquals(stopper.res, ddef.getSearchResponses().length);
+		assertEquals(stopper.res, ddef.getSearchResponses().size());
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.Discoverer#isSearching()}.
+	 * Test method for {@link Discoverer#isSearching()}.
 	 *
 	 * @throws KNXException
 	 * @throws InterruptedException on interrupted thread
 	 */
+	@Test
 	public final void testIsSearching() throws KNXException, InterruptedException
 	{
 		ddef.startSearch(timeout, false);
@@ -448,16 +453,18 @@ public class DiscovererTest extends TestCase
 	}
 
 	/**
-	 * Test method for {@link tuwien.auto.calimero.knxnetip.Discoverer#startSearch(int, boolean)}.
+	 * Test method for {@link Discoverer#startSearch(int, boolean)}.
 	 *
 	 * @throws KNXException
 	 */
+	@Test
 	public final void testStartSearchInterrupt() throws KNXException
 	{
 		final Thread t = Thread.currentThread();
 		try {
 			final class Stopper extends Thread
 			{
+				@Override
 				public void run()
 				{
 					try {
